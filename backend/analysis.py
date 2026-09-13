@@ -112,12 +112,14 @@ def data_quality_report() -> dict:
     outliers = []
     trimmed = df
     for col in cols_to_check:
-        q1, q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+        # bounds recomputed on the progressively trimmed frame, exactly as the
+        # Exp-2 loop does (`df = df[(df[i] > LB) & (df[i] <= UB)]`)
+        q1, q3 = trimmed[col].quantile(0.25), trimmed[col].quantile(0.75)
         iqr = q3 - q1
         if iqr == 0:
             continue
         lb, ub = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-        n_out = int(((df[col] < lb) | (df[col] > ub)).sum())
+        n_out = int(((trimmed[col] < lb) | (trimmed[col] > ub)).sum())
         if n_out:
             outliers.append({"column": col, "count": n_out,
                              "lower": round(float(lb), 2), "upper": round(float(ub), 2)})

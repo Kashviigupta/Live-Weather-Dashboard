@@ -53,12 +53,12 @@ The forecast curve reuses the Exp-5 normal equation with a harmonic
 annual cycle; the live reading anchors the curve at *now*, and the ribbon is
 ±1.96 σ of the fit residuals.
 
-> **Reading the departure badge.** The archive's `normal_tmax_c` for these
-> stations runs several degrees cooler than what the live provider reports for
-> the same calendar window (e.g. mid-September Delhi: archive normal ≈ 25.8 °C,
-> live day max ≈ 31.9 °C). That is a property of the dataset, not a bug — so
-> live departures and severity flags read high. The panel always prints both
-> numbers (live max and station normal) so the offset is visible rather than
+> **Reading the departure badge.** The archive's `normal_tmax_c` runs a few
+> degrees cooler than what the live provider reports for the same calendar
+> window at many stations (mid-September Delhi: archive normal ≈ 25.8 °C vs
+> live day max ≈ 31.9 °C), so live departures and severity flags read high —
+> a property of the dataset, not a bug. The panel always prints both numbers
+> (today's max and the station normal) so the offset stays visible rather than
 > hidden.
 
 Heatwave severity on the live card is scored the way the dataset labels it —
@@ -83,10 +83,15 @@ live temperature minus the station's `normal_tmax_c` for this calendar window
 | `GET /api/heatmap?location=&metric=` | month × year matrix |
 | `GET /api/categorical?location=` | ordinal encodings + frequency listing |
 
-## Dataset note
+## Dataset
 
-`data/Climate_final_k.csv` currently holds **9,025 rows across 5 stations**
-(2019-01-01 → 2024-12-31) — the portion of the file recovered from the chat
-attachment, which was truncated at 2 MB. Drop the full 65,760-row
-`Climate_final_k.csv` into `data/` (same filename) and restart; every panel,
-station list and statistic reads from it directly with no code change.
+`data/Climate_final_k.csv` — **65,760 daily records × 35 attributes across 30
+AWS stations**, 2019-01-01 → 2024-12-31 (~14 MB, committed to the repo). No
+nulls, no duplicate rows; the Exp-2 pipeline trims it to **58,852 rows** under
+sequential 1.5 × IQR filtering, matching the experiment report exactly.
+
+Stations span all five zones and three terrain types — from Jaisalmer and
+Bikaner in the desert plains to Gangtok, Manali, Darjeeling and Ooty in the
+hills, and Kochi, Puri, Alibaug and Visakhapatnam on the coast. Every panel,
+the station selector and the geospatial grid read straight from this file, so
+replacing it is the only step needed to point the dashboard at new data.
