@@ -16,6 +16,10 @@ const state = {
   scope: "all",
   activeSection: null,
   navLockedUntil: 0,
+  leagueScope: "all",
+  leagueSort: "avg_mean_temp",
+  leagueDir: "desc",
+  leagueQuery: "",
   distColumn: "tmax_c",
   heatMetric: "tmax_c",
   timer: null,
@@ -677,6 +681,154 @@ function renderAggregation(agg, enc) {
   }
 }
 
+/* ----------------------------------------------------- league table (rank) */
+const LEAGUE_COLUMNS = [
+  { key: "station", label: "Location", align: "left", type: "text" },
+  { key: "avg_mean_temp", label: "Temperature °C", type: "num", digits: 1 },
+  { key: "hottest", label: "Hottest °C", type: "num", digits: 1 },
+  { key: "avg_rh", label: "Humidity %", type: "num", digits: 1 },
+  { key: "avg_wind", label: "Wind km/h", type: "num", digits: 1 },
+  { key: "heatwave_days", label: "Heatwave days", type: "num", digits: 0 },
+  { key: "elevation_m", label: "Elev. m", type: "num", digits: 0 },
+  { key: "monthly_tmax", label: "Jan–Dec", type: "spark" },
+];
+
+const KIND_TAG = {
+  "AWS station": ["AWS", "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"],
+  State: ["ST", "bg-violet-500/15 text-violet-300 border-violet-500/30"],
+  UT: ["UT", "bg-violet-500/15 text-violet-300 border-violet-500/30"],
+  City: ["CT", "bg-slate-500/15 text-slate-300 border-slate-500/40"],
+};
+
+/** Monthly Tmax drawn as a small inline sparkline, coloured by value. */
+function sparkline(values, lo, hi) {
+  const pts = values.map((v, i) => [i, v]).filter(([, v]) => v !== null);
+  if (pts.length < 2) return "";
+  const w = 104, h = 22, pad = 2;
+  const x = (i) => pad + (i / 11) * (w - pad * 2);
+  const y = (v) => h - pad - ((v - lo) / (hi - lo || 1)) * (h - pad * 2);
+
+  const path = pts.map(([i, v], n) => `${n ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const dots = pts.map(([i, v]) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="1.7" fill="${tempColor(v, lo, hi)}"></circle>`).join("");
+
+  return `<svg width="${w}" height="${h}" class="overflow-visible">
+    <path d="${path}" fill="none" stroke="rgba(148,163,184,.45)" stroke-width="1"></path>${dots}</svg>`;
+}
+
+function renderLeagueTable() {
+  const rows = state.stations || [];
+  if (!rows.length) return;
+
+  const scope = state.leagueScope || "all";
+  const query = (state.leagueQuery || "").trim().toLowerCase();
+
+  const inScope = (s) =>
+    scope === "all" ||
+    (scope === "station" && s.source === "climate-final-k") ||
+    (scope === "state" && (s.kind === "State" || s.kind === "UT")) ||
+    (scope === "city" && s.kind === "City");
+
+  const matches = (s) => !query ||
+    [s.station, s.state, s.zone, s.terrain_type].some((f) => String(f || "").toLowerCase().includes(query));
+
+  const visible = rows.filter((s) => inScope(s) && matches(s));
+
+  const sortKey = state.leagueSort || "avg_mean_temp";
+  const dir = state.leagueDir === "asc" ? 1 : -1;
+  const col = LEAGUE_COLUMNS.find((c) => c.key === sortKey) || LEAGUE_COLUMNS[1];
+  visible.sort((a, b) => col.type === "text"
+    ? dir * String(a[sortKey]).localeCompare(String(b[sortKey]))
+    : dir * ((a[sortKey] ?? -Infinity) - (b[sortKey] ?? -Infinity)));
+
+  // one colour scale across every sparkline so rows stay comparable
+  const all = visible.flatMap((s) => s.monthly_tmax || []).filter((v) => v !== null);
+  const lo = all.length ? Math.min(...all) : 0;
+  const hi = all.length ? Math.max(...all) : 1;
+
+  const head = `<thead class="sticky top-0 z-10">
+    <tr class="bg-space-900/95 backdrop-blur text-[10px] uppercase tracking-wider text-slate-400">
+      ${LEAGUE_COLUMNS.map((c) => {
+        const active = c.key === sortKey;
+        const arrow = active ? (dir === 1 ? " ▲" : " ▼") : "";
+        const sortable = c.type !== "spark";
+        return `<th class="${c.align === "left" ? "text-left" : "text-right"} px-3 py-2.5 font-semibold border-b border-slate-800
+                    ${sortable ? "cursor-pointer hover:text-cyan-300 select-none" : ""} ${active ? "text-cyan-300" : ""}"
+                    ${sortable ? `data-sort="${c.key}"` : ""}>${c.label}${arrow}</th>`;
+      }).join("")}
+    </tr></thead>`;
+
+  const body = visible.map((s, i) => {
+    const active = state.station && s.location === state.station.location;
+    const [tag, tagClass] = KIND_TAG[s.kind] || ["--", "bg-slate-700/30 text-slate-400 border-slate-700"];
+    const cells = LEAGUE_COLUMNS.map((c) => {
+      if (c.key === "station") {
+        return `<td class="px-3 py-2 text-left whitespace-nowrap">
+          <span class="text-slate-500 mr-2">${i + 1}</span>
+          <span class="${active ? "text-cyan-300 font-semibold" : "text-slate-200"}">${esc(s.station)}</span>
+          <span class="ml-2 px-1.5 py-0.5 rounded border text-[9px] ${tagClass}">${tag}</span>
+          <span class="ml-2 text-slate-500 text-[10px]">${esc(s.kind === "AWS station" ? s.zone : s.state)}</span>
+        </td>`;
+      }
+      if (c.type === "spark") {
+        return `<td class="px-3 py-2 text-right">${sparkline(s.monthly_tmax || [], lo, hi)}</td>`;
+      }
+      const v = s[c.key];
+      const isTemp = c.key === "avg_mean_temp" || c.key === "hottest";
+      const colour = isTemp && v != null ? `style="color:${tempColor(v, lo, hi)}"` : "";
+      return `<td class="px-3 py-2 text-right tabular-nums ${isTemp ? "font-semibold" : "text-slate-300"}" ${colour}>${fmt(v, c.digits)}</td>`;
+    }).join("");
+
+    return `<tr class="border-b border-slate-800/50 cursor-pointer transition-colors
+                 ${active ? "bg-cyan-500/10" : "hover:bg-space-800/50"}"
+                 data-location="${esc(s.location)}">${cells}</tr>`;
+  }).join("");
+
+  $("leagueTable").innerHTML = head + `<tbody>${body}</tbody>`;
+  $("leagueCount").textContent =
+    `${visible.length} of ${rows.length} locations · sorted by ${col.label.toLowerCase()} ` +
+    `(${dir === 1 ? "ascending" : "descending"})`;
+
+  $("leagueLegendSpark").innerHTML = sparkline(
+    [20, 23, 27, 31, 34, 33, 30, 29, 30, 28, 24, 21], 20, 34);
+}
+
+function wireLeagueTable() {
+  $("leagueTable").addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-sort]");
+    if (th) {
+      const key = th.dataset.sort;
+      if (state.leagueSort === key) {
+        state.leagueDir = state.leagueDir === "asc" ? "desc" : "asc";
+      } else {
+        state.leagueSort = key;
+        state.leagueDir = key === "station" ? "asc" : "desc";
+      }
+      renderLeagueTable();
+      return;
+    }
+    const tr = e.target.closest("tr[data-location]");
+    if (tr) selectStation(tr.dataset.location);
+  });
+
+  $("leagueScope").addEventListener("click", (e) => {
+    const btn = e.target.closest(".league-pill");
+    if (!btn) return;
+    state.leagueScope = btn.dataset.scope;
+    document.querySelectorAll(".league-pill").forEach((b) => {
+      b.className = b === btn
+        ? "league-pill px-2.5 py-1 rounded-lg bg-slate-700/50 text-slate-200 border border-slate-600/50"
+        : "league-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors";
+    });
+    renderLeagueTable();
+  });
+
+  $("leagueFilter").addEventListener("input", (e) => {
+    state.leagueQuery = e.target.value;
+    renderLeagueTable();
+  });
+}
+
 /* ------------------------------------------------------------- quality UI */
 function renderQuality(q) {
   $("completeness").textContent = `${q.completeness_pct}%`;
@@ -891,6 +1043,7 @@ async function refreshLive() {
 
 async function selectStation(location) {
   state.station = state.stations.find((s) => s.location === location) || state.stations[0];
+  renderLeagueTable();
   const series = await loadStationAnalytics(state.station.location);
   await refreshLive();
   if (state.last.forecast) renderSeries(series, state.last.forecast, state.last.live);
@@ -913,6 +1066,7 @@ async function init() {
   // Controls are wired before any data is fetched, so the dashboard stays
   // interactive even if an endpoint or the provider is down.
   wireEvents();
+  wireLeagueTable();
 
   await loadStatic();
 
@@ -920,6 +1074,8 @@ async function init() {
   state.stations = stations;
 
   $("stationSelect").innerHTML = buildLocationOptions(stations);
+
+  renderLeagueTable();
 
   await selectStation(stations[0].location);
   renderStationMap();

@@ -150,6 +150,11 @@ def data_quality_report() -> dict:
 def station_catalogue() -> list:
     """Exp-2 geospatial view: one row per station with its climatology."""
     df = load_data()
+    # Jan-Dec mean Tmax per location, for the league table's sparkline
+    monthly = (df.pivot_table(index="location", columns="month", values="tmax_c",
+                              aggfunc="mean", observed=True)
+                 .reindex(columns=range(1, 13)).round(1))
+
     grouped = df.groupby("location", observed=True).agg(
         station=("station", "first"),
         state=("state", "first"),
@@ -164,6 +169,8 @@ def station_catalogue() -> list:
         avg_rh=("rh_mean_pct", "mean"),
         avg_wind=("wind_speed_kmph", "mean"),
         avg_pressure=("pressure_hpa", "mean"),
+        hottest=("tmax_c", "max"),
+        coolest=("tmin_c", "min"),
         heatwave_days=("heatwave_flag", "sum"),
         records=("tmax_c", "size"),
     ).reset_index()
@@ -188,8 +195,12 @@ def station_catalogue() -> list:
             "avg_rh": round(float(r["avg_rh"]), 1),
             "avg_wind": round(float(r["avg_wind"]), 1),
             "avg_pressure": round(float(r["avg_pressure"]), 1),
+            "hottest": round(float(r["hottest"]), 1),
+            "coolest": round(float(r["coolest"]), 1),
             "heatwave_days": int(r["heatwave_days"]),
             "records": int(r["records"]),
+            "monthly_tmax": [None if pd.isna(v) else float(v)
+                             for v in monthly.loc[r["location"]]],
         })
     return sorted(out, key=lambda d: d["station"])
 

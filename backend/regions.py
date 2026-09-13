@@ -389,8 +389,15 @@ def region_catalogue(only_cached: bool = False) -> list:
             "avg_rh": round(float(df["rh_mean_pct"].mean()), 1),
             "avg_wind": round(float(df["wind_speed_kmph"].mean()), 1),
             "avg_pressure": round(float(df["pressure_hpa"].mean()), 1),
+            "hottest": round(float(df["tmax_c"].max()), 1),
+            "coolest": round(float(df["tmin_c"].min()), 1),
             "heatwave_days": int(df["heatwave_flag"].sum()),
             "records": int(len(df)),
+            # Jan-Dec mean Tmax, for the league table's sparkline
+            "monthly_tmax": [
+                None if pd.isna(v) else round(float(v), 1)
+                for v in df.groupby("month")["tmax_c"].mean().reindex(range(1, 13))
+            ],
         })
     return sorted(out, key=lambda d: d["station"])
 

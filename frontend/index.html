@@ -152,6 +152,7 @@
     <button data-target="sec-conditions" class="nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all">Conditions</button>
     <button data-target="sec-regression" class="nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all">Regression Lab</button>
     <button data-target="sec-aggregation" class="nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all">Aggregation</button>
+    <button data-target="sec-league" class="nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all">League Table</button>
     <button data-target="sec-pipeline" class="nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all">Pipeline Health</button>
   </nav>
 </header>
@@ -724,9 +725,57 @@
     </div>
   </section>
 
+  <!-- ================== 10. LEAGUE TABLE (full width) ================== -->
+  <section id="sec-league" class="space-y-4">
+    <div class="section-label font-mono uppercase text-cyan-400/70">10 &mdash; Aggregation &middot; ranking</div>
+
+    <div class="glass-panel panel">
+      <div class="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-slate-800">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+            <h2 class="panel-title font-mono font-semibold uppercase text-white">Location League Table</h2>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">
+            Every location ranked over its full record. Click a header to sort, a row to load that dashboard.
+            <span class="text-slate-500">AWS = dataset station, ST/UT = statewide, CT = city.</span>
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="relative">
+            <input id="leagueFilter" type="text" placeholder="Filter by name, state or zone..."
+                   class="bg-space-850/80 border border-slate-700/70 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/70 focus:ring-1 focus:ring-cyan-500/40 transition-all font-mono w-[240px]"/>
+            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <div class="flex items-center gap-1 bg-space-900/90 p-1 rounded-xl border border-slate-800 text-xs font-mono" id="leagueScope">
+            <button data-scope="all" class="league-pill px-2.5 py-1 rounded-lg bg-slate-700/50 text-slate-200 border border-slate-600/50">All</button>
+            <button data-scope="station" class="league-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Stations</button>
+            <button data-scope="state" class="league-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">States</button>
+            <button data-scope="city" class="league-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Cities</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 overflow-auto max-h-[560px] rounded-xl border border-slate-800/80" id="leagueWrap">
+        <table class="w-full text-xs font-mono border-collapse min-w-[860px]" id="leagueTable"></table>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-slate-400">
+        <span id="leagueCount">--</span>
+        <span class="flex items-center gap-2">
+          Sparkline: mean Tmax by month, Jan
+          <span class="inline-block w-16 h-3 align-middle" id="leagueLegendSpark"></span>
+          Dec
+        </span>
+      </div>
+    </div>
+  </section>
+
   <!-- ================== 10. PIPELINE HEALTH (full width) ================== -->
   <section id="sec-pipeline" class="space-y-4">
-    <div class="section-label font-mono uppercase text-cyan-400/70">10 &mdash; Pipeline &amp; data quality</div>
+    <div class="section-label font-mono uppercase text-cyan-400/70">11 &mdash; Pipeline &amp; data quality</div>
 
     <div class="glass-panel-subtle panel border border-slate-800 rounded-2xl">
       <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-6">

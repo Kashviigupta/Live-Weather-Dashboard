@@ -90,7 +90,7 @@ per request instead of at build time. On [render.com](https://render.com):
 | Experiment | What it computes | Where it shows up |
 |---|---|---|
 | **Exp 1** — attribute classification | Nominal / Ordinal / Interval / Ratio taxonomy; ordinal label encodings | *Model Diagnostics* drawer (taxonomy table); *Aggregation & Encoding* card (severity, alert_color, tmax_category, wind_category codes) |
-| **Exp 2** — data handling | `info` / `isnull` / `duplicated`, mean–mode imputation, 1.5 × IQR outlier trimming, groupby suite, correlation heatmap, station scatter | *Pipeline & Anomaly Engine* strip, *Climate Density Matrix*, *Geospatial Station Grid*, *Aggregation* chart, outlier ledger |
+| **Exp 2** — data handling | `info` / `isnull` / `duplicated`, mean–mode imputation, 1.5 × IQR outlier trimming, groupby suite, correlation heatmap, station scatter | *Pipeline & Anomaly Engine* strip, *Climate Density Matrix*, *Geospatial Station Grid*, *Aggregation* chart, *Location League Table*, outlier ledger |
 | **Exp 3** — central tendency & variability | `mean_manual`, `median_manual`, `mode_manual`, `variance_manual`, `std_manual` (Newton–Raphson), `percentile_manual`, `iqr_manual`, grouped-data frequency table | *Statistical Distribution* panel — histogram, KDE, box-plot, μ/σ/median/mode/skew/kurtosis, grouped-vs-ungrouped comparison line |
 | **Exp 4** — correlation coefficient | `correlation_coefficient(x, y)` from first principles + full Pearson matrix | *Correlation Matrix* panel and the three labelled pairs below it (positive / negative / no correlation) |
 | **Exp 5** — regression | `simple_linear_regression` (least squares) and `multiple_linear_regression` (normal equation `b = (XᵀX)⁻¹Xᵀy`), MAE / RMSE / R² | *Regression Lab* (SLR scatter + line, MLR actual-vs-predicted) and the forecast ribbon in the time-series panel |
@@ -170,6 +170,12 @@ always says which archive is behind the numbers on screen, and the geospatial
 grid draws AWS stations as circles, states as diamonds and cities as squares,
 with an All / Stations / States / Cities filter so 204 archive points stay
 readable.
+
+The **Location League Table** ranks every location over its full record —
+mean and peak temperature, humidity, wind, heatwave days, elevation, and a
+Jan–Dec sparkline of mean Tmax. Click any header to sort, type to filter by
+name / state / zone, switch scope between stations, states and cities, and
+click a row to load that location's dashboard.
 
 The top taskbar tracks scroll position: as you move down the page the active
 tab advances section by section, and the bar scrolls horizontally to keep the
