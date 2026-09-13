@@ -14,9 +14,18 @@ Live-Weather-Dashboard/
 │   └── app.py                    # FastAPI service + static hosting
 ├── frontend/
 │   ├── index.html                # the Aethercast UI
-│   └── app.js                    # data binding + charts
+│   ├── app.js                    # data binding + charts
+│   └── static-source.js          # serverless mode for GitHub Pages
+├── scripts/build_static.py       # freezes the analysis to JSON for Pages
+├── .github/workflows/            # Pages build + deploy
+├── render.yaml                   # optional: host the real FastAPI service
 └── requirements.txt
 ```
+
+Two ways to run it: **with the FastAPI backend**, where the experiment code runs
+per request, or **fully static on GitHub Pages**, where it runs at build time and
+the browser talks to the weather API directly. Both serve the same UI from the
+same source files — see [Deploying](#deploying).
 
 ## Run it
 
@@ -37,6 +46,43 @@ $env:OPENWEATHER_API_KEY = "your_key"; python backend/app.py
 The dashboard polls `/api/live` every 60 s in **Live** mode (5 min in Hourly,
 15 min in Daily); responses are cached server-side for 60 s so the provider is
 not hammered.
+
+## Deploying
+
+### GitHub Pages (live URL, no server to run)
+
+`.github/workflows/deploy-pages.yml` runs on every push to `main`. It installs
+the dependencies, executes `scripts/build_static.py` — which runs the Exp 1–5
+code over the full dataset and freezes every result to JSON — and publishes the
+`docs/` build to Pages:
+
+**https://kashviigupta.github.io/Live-Weather-Dashboard/**
+
+The page stays live: `frontend/static-source.js` calls Open-Meteo straight from
+the browser for current conditions, air quality and the hourly/daily outlook,
+then scores heatwave severity against the station normals and evaluates the
+Exp-5 harmonic forecast client-side from the stored coefficients. Only the
+archive analytics are pre-computed — they're derived from a fixed CSV, so
+nothing is lost by building them ahead of time.
+
+First deployment: after the first push, open the repo's **Actions** tab and
+check the *Deploy dashboard to GitHub Pages* run. The workflow enables Pages on
+its own; if your account blocks that, set **Settings → Pages → Source** to
+*GitHub Actions* and re-run it. Build takes ~4 minutes (813 JSON files, ~4.4 MB).
+
+To preview the exact Pages build locally:
+
+```bash
+python scripts/build_static.py      # writes docs/
+python -m http.server 8080 -d docs  # http://127.0.0.1:8080
+```
+
+### Render (runs the real FastAPI service)
+
+`render.yaml` is a Blueprint for the full backend, so the experiment code runs
+per request instead of at build time. On [render.com](https://render.com):
+**New → Blueprint → connect this repo → Apply**. The free instance sleeps after
+15 minutes idle and takes ~50 s to wake. `OPENWEATHER_API_KEY` is optional.
 
 ## Where each experiment appears
 

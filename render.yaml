@@ -1,0 +1,16 @@
+# Optional: run the real FastAPI service (not just the static build) on Render.
+# Render reads this file when you create a Blueprint from the GitHub repo.
+services:
+  - type: web
+    name: aethercast-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --app-dir backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      # Optional - current conditions switch to OpenWeatherMap when set.
+      # - key: OPENWEATHER_API_KEY
+      #   sync: false

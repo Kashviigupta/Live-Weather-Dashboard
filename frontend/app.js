@@ -24,6 +24,15 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 async function api(path, params = {}) {
+  // On GitHub Pages there is no FastAPI process: static-source.js answers the
+  // same paths from pre-computed JSON and a direct call to the weather API.
+  if (window.AETHERCAST_STATIC && window.StaticSource) {
+    const t0 = performance.now();
+    const json = await window.StaticSource.get(path, params);
+    json.__latency = Math.round(performance.now() - t0);
+    return json;
+  }
+
   const url = new URL(API + path, window.location.origin);
   Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.set(k, v));
   const t0 = performance.now();
