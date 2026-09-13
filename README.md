@@ -171,6 +171,22 @@ grid draws AWS stations as circles, states as diamonds and cities as squares,
 with an All / Stations / States / Cities filter so 204 archive points stay
 readable.
 
+The **Geospatial Field Maps** draw six live surface variables as continuous,
+contoured maps — **temperature, humidity, rain, wind, gust and visibility** —
+each in its own colour ramp. [backend/fieldgrid.py](backend/fieldgrid.py)
+samples a regular 22 × 22 grid over the selected location's state (or 20 × 20
+over all of India) from the Open-Meteo forecast API, 90 points per request; the
+browser upsamples the lattice bilinearly onto a canvas, traces contour lines
+with marching squares, and lays place names over the surface with collision
+avoidance. Switching variables re-colours the same grid without refetching.
+Rain is the previous full day's total, since the current hour is dry almost
+everywhere and would draw a flat map.
+
+A whole grid costs several hundred weighted API units and shares a per-minute
+quota with the live reading, so batches are paced and retried, and the map is
+only sampled *after* the live card has loaded — the field map can never starve
+the core panel.
+
 The **Location League Table** ranks every location over its full record —
 mean and peak temperature, humidity, wind, heatwave days, elevation, and a
 Jan–Dec sparkline of mean Tmax. Click any header to sort, type to filter by

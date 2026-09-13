@@ -20,6 +20,11 @@ const state = {
   leagueSort: "avg_mean_temp",
   leagueDir: "desc",
   leagueQuery: "",
+  fieldVar: "temperature",
+  fieldExtent: "state",
+  fieldGrid: null,
+  fieldKey: null,
+  fieldBox: null,
   distColumn: "tmax_c",
   heatMetric: "tmax_c",
   timer: null,
@@ -54,8 +59,40 @@ async function api(path, params = {}) {
 const fmt = (v, d = 1, suffix = "") =>
   v === null || v === undefined || Number.isNaN(v) ? "--" : `${Number(v).toFixed(d)}${suffix}`;
 
+/* ------------------------------------------------------------------ theme */
+// Most of the page is themed in CSS (html.light remaps the utility classes).
+// These are the colours JavaScript paints directly - chart strokes, canvas
+// cells, inline styles - which CSS cannot reach.  The light values follow the
+// light design spec: 600-weight accents that hold contrast on white.
+const THEMES = {
+  dark: {
+    tick: "#94a3b8", grid: "rgba(31,48,86,0.55)", axisTitle: "#64748b",
+    empty: "#1f3056", primary: "#00f2fe", primaryFill: "rgba(0,242,254,0.12)",
+    barPeak: "rgba(0,242,254,0.85)", bar: "rgba(59,130,246,0.45)",
+    emerald: "#10b981", violet: "#8b5cf6", violetFill: "rgba(139,92,246,0.18)",
+    amber: "#f59e0b", rose: "#f43f5e", blue: "#3b82f6", sky: "#38bdf8",
+    scatter: "rgba(56,189,248,0.35)", scatterAlt: "rgba(139,92,246,0.45)",
+    normal: "rgba(148,163,184,0.55)", spark: "rgba(148,163,184,.45)",
+    weakCellText: "#f1f5f9",
+  },
+  light: {
+    tick: "#64748b", grid: "rgba(148,163,184,0.28)", axisTitle: "#475569",
+    empty: "#e2e8f0", primary: "#0284c7", primaryFill: "rgba(2,132,199,0.10)",
+    barPeak: "rgba(2,132,199,0.9)", bar: "rgba(56,189,248,0.55)",
+    emerald: "#059669", violet: "#7c3aed", violetFill: "rgba(124,58,237,0.14)",
+    amber: "#d97706", rose: "#e11d48", blue: "#2563eb", sky: "#0284c7",
+    scatter: "rgba(2,132,199,0.35)", scatterAlt: "rgba(124,58,237,0.40)",
+    normal: "rgba(71,85,105,0.55)", spark: "rgba(100,116,139,.55)",
+    weakCellText: "#0f172a",
+  },
+};
+
+const currentTheme = () =>
+  document.documentElement?.classList?.contains("light") ? "light" : "dark";
+const T = () => THEMES[currentTheme()];
+
 function tempColor(v, min, max) {
-  if (v === null || v === undefined) return "#1f3056";
+  if (v === null || v === undefined) return T().empty;
   const t = Math.max(0, Math.min(1, (v - min) / (max - min || 1)));
   const stops = [
     [0.0, [8, 145, 178]],    // cyan-600
@@ -73,8 +110,16 @@ function tempColor(v, min, max) {
 }
 
 function corrColor(r) {
-  if (r >= 0.999) return "background:#06b6d4;color:#070a13;font-weight:700";
   const a = Math.min(Math.abs(r), 1);
+  if (currentTheme() === "light") {
+    // tints fade to white, so the text flips to white once the fill is strong
+    if (r >= 0.999) return "background:#0284c7;color:#ffffff;font-weight:700";
+    const ink = a > 0.55 ? "#ffffff" : r >= 0 ? "#0c4a6e" : "#881337";
+    return r >= 0
+      ? `background:rgba(2,132,199,${0.10 + a * 0.8});color:${ink}`
+      : `background:rgba(225,29,72,${0.10 + a * 0.8});color:${ink}`;
+  }
+  if (r >= 0.999) return "background:#06b6d4;color:#070a13;font-weight:700";
   return r >= 0
     ? `background:rgba(6,182,212,${0.15 + a * 0.7});color:#e2e8f0`
     : `background:rgba(225,29,72,${0.15 + a * 0.7});color:#ffe4e6`;
@@ -86,14 +131,20 @@ function corrColor(r) {
 const HAS_CHARTS = typeof Chart !== "undefined";
 
 if (HAS_CHARTS) {
-  Chart.defaults.color = "#94a3b8";
   Chart.defaults.font.family = "ui-monospace, SFMono-Regular, Consolas, monospace";
   Chart.defaults.font.size = 10;
   Chart.defaults.plugins.legend.display = false;
   Chart.defaults.maintainAspectRatio = false;
 }
 
-const gridStyle = { color: "rgba(31,48,86,0.55)", drawTicks: false };
+// shared by every chart's scales; the colour is refreshed on theme change
+const gridStyle = { color: THEMES.dark.grid, drawTicks: false };
+
+function applyChartTheme() {
+  gridStyle.color = T().grid;
+  if (HAS_CHARTS) Chart.defaults.color = T().tick;
+}
+applyChartTheme();
 
 function drawChart(key, canvasId, config) {
   if (!HAS_CHARTS) return;
@@ -435,16 +486,16 @@ function renderSeries(series, forecast, live) {
     data: {
       labels,
       datasets: [
-        { label: "CI upper", data: ciHi, borderColor: "transparent", backgroundColor: "rgba(139,92,246,0.18)",
+        { label: "CI upper", data: ciHi, borderColor: "transparent", backgroundColor: T().violetFill,
           fill: "+1", pointRadius: 0, tension: 0.35 },
         { label: "CI lower", data: ciLo, borderColor: "transparent", backgroundColor: "transparent",
           fill: false, pointRadius: 0, tension: 0.35 },
-        { label: "Tmax (C)", data: tmax, borderColor: "#00f2fe", backgroundColor: "rgba(0,242,254,0.12)",
+        { label: "Tmax (C)", data: tmax, borderColor: T().primary, backgroundColor: T().primaryFill,
           borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true, spanGaps: false },
-        { label: "Tmin (C)", data: tmin, borderColor: "#10b981", borderWidth: 1.8, pointRadius: 0, tension: 0.3 },
-        { label: "Normal Tmax", data: normal, borderColor: "rgba(148,163,184,0.55)", borderDash: [4, 4],
+        { label: "Tmin (C)", data: tmin, borderColor: T().emerald, borderWidth: 1.8, pointRadius: 0, tension: 0.3 },
+        { label: "Normal Tmax", data: normal, borderColor: T().normal, borderDash: [4, 4],
           borderWidth: 1.2, pointRadius: 0, tension: 0.3 },
-        { label: "Predicted", data: predicted, borderColor: "#8b5cf6", borderDash: [6, 4],
+        { label: "Predicted", data: predicted, borderColor: T().violet, borderDash: [6, 4],
           borderWidth: 2.5, pointRadius: 0, tension: 0.35 },
       ],
     },
@@ -481,10 +532,10 @@ function renderDistribution(dist, stats) {
       datasets: [
         { type: "bar", label: "Frequency", data: dist.frequency,
           backgroundColor: dist.frequency.map((f) => f === Math.max(...dist.frequency)
-            ? "rgba(0,242,254,0.85)" : "rgba(59,130,246,0.45)"),
+            ? T().barPeak : T().bar),
           borderRadius: 3, barPercentage: 0.95, categoryPercentage: 0.95 },
         { type: "line", label: "KDE", data: dist.kde_x.map((x, i) => ({ x, y: dist.kde_y[i] })),
-          borderColor: "#f59e0b", borderWidth: 2, pointRadius: 0, tension: 0.4, xAxisID: "xKde" },
+          borderColor: T().amber, borderWidth: 2, pointRadius: 0, tension: 0.4, xAxisID: "xKde" },
       ],
     },
     options: {
@@ -541,8 +592,11 @@ function renderHeatmap(h) {
       if (v === null) return `<td class="p-1"><div class="h-6 rounded bg-space-900 border border-slate-800/60 flex items-center justify-center text-slate-600">-</div></td>`;
       const bg = tempColor(v, h.min, h.max);
       const strong = (v - h.min) / (h.max - h.min || 1) > 0.55;
-      return `<td class="p-1"><div class="h-6 rounded flex items-center justify-center ${strong ? "text-white font-bold" : "text-slate-100"}"
-        style="background:${bg}${strong ? "" : "; opacity:.85"}" title="${m} - ${v}${unit}">${v}</div></td>`;
+      // inline ink rather than text-* classes: the cell colour is the same in
+      // both themes, so its text must not follow the theme remap
+      const ink = strong ? "#ffffff" : T().weakCellText;
+      return `<td class="p-1"><div class="h-6 rounded flex items-center justify-center ${strong ? "font-bold" : ""}"
+        style="background:${bg};color:${ink}${strong ? "" : "; opacity:.85"}" title="${m} - ${v}${unit}">${v}</div></td>`;
     }).join("");
     return `<tr class="border-t border-slate-800/40">
       <td class="text-left font-semibold text-slate-400 py-1 pr-1 text-[10px]">${m.slice(0, 3)}</td>${cells}</tr>`;
@@ -590,16 +644,16 @@ function renderRegression(reg) {
     data: {
       datasets: [
         { label: "Observations", data: reg.slr.scatter.map(([x, y]) => ({ x, y })),
-          backgroundColor: "rgba(56,189,248,0.35)", pointRadius: 2 },
+          backgroundColor: T().scatter, pointRadius: 2 },
         { type: "line", label: "Regression line", data: reg.slr.line.map(([x, y]) => ({ x, y })),
-          borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0 },
+          borderColor: T().rose, borderWidth: 2, pointRadius: 0 },
       ],
     },
     options: {
       plugins: { tooltip: { backgroundColor: "#0c1222" } },
       scales: {
-        x: { grid: gridStyle, title: { display: true, text: reg.slr.predictor, color: "#64748b" } },
-        y: { grid: gridStyle, title: { display: true, text: reg.slr.target, color: "#64748b" } },
+        x: { grid: gridStyle, title: { display: true, text: reg.slr.predictor, color: T().axisTitle } },
+        y: { grid: gridStyle, title: { display: true, text: reg.slr.target, color: T().axisTitle } },
       },
     },
   });
@@ -616,16 +670,16 @@ function renderRegression(reg) {
     data: {
       datasets: [
         { label: "Actual vs predicted", data: pts.map(([a, p]) => ({ x: a, y: p })),
-          backgroundColor: "rgba(139,92,246,0.45)", pointRadius: 2.5 },
+          backgroundColor: T().scatterAlt, pointRadius: 2.5 },
         { type: "line", label: "Ideal", data: lim.map((v) => ({ x: v, y: v })),
-          borderColor: "#f43f5e", borderWidth: 1.5, pointRadius: 0 },
+          borderColor: T().rose, borderWidth: 1.5, pointRadius: 0 },
       ],
     },
     options: {
       plugins: { tooltip: { backgroundColor: "#0c1222" } },
       scales: {
-        x: { grid: gridStyle, title: { display: true, text: "Actual tmax_c", color: "#64748b" } },
-        y: { grid: gridStyle, title: { display: true, text: "Predicted tmax_c", color: "#64748b" } },
+        x: { grid: gridStyle, title: { display: true, text: "Actual tmax_c", color: T().axisTitle } },
+        y: { grid: gridStyle, title: { display: true, text: "Predicted tmax_c", color: T().axisTitle } },
       },
     },
   });
@@ -637,7 +691,8 @@ function renderRegression(reg) {
 
 /* ------------------------------------------------- aggregation + encoding */
 function renderAggregation(agg, enc) {
-  const palette = ["#00f2fe", "#10b981", "#f59e0b", "#8b5cf6", "#f43f5e", "#3b82f6"];
+  const t = T();
+  const palette = [t.primary, t.emerald, t.amber, t.violet, t.rose, t.blue];
   drawChart("agg", "aggChart", {
     type: "line",
     data: {
@@ -681,6 +736,327 @@ function renderAggregation(agg, enc) {
   }
 }
 
+/* --------------------------------------------------- geospatial field maps */
+// One colour ramp per variable, dark-to-light or light-to-dark as each quantity
+// reads most naturally: copper deepening with heat, blues brightening with
+// moisture and rain, teal for wind, violet for gusts, grey clearing for sight.
+const FIELD_VARS = {
+  temperature: { label: "Temperature", unit: "°C", digits: 1, accent: "#f59e0b",
+    ramp: ["#fde8d7", "#f8c9a4", "#ef9a63", "#d2692f", "#9c4318", "#5a240c", "#2a1206"] },
+  humidity: { label: "Humidity", unit: "%", digits: 0, accent: "#60a5fa",
+    ramp: ["#0b1a3a", "#13306a", "#1f4d99", "#3a74c2", "#72a2de", "#b4d0f2", "#eef5ff"] },
+  rain: { label: "Rain", unit: "mm, previous day", digits: 1, accent: "#38bdf8",
+    ramp: ["#0a1630", "#112a57", "#1b4585", "#2c66b3", "#5b93d6", "#a5c6ee", "#f2f8ff"] },
+  wind: { label: "Wind", unit: "km/h", digits: 1, accent: "#2dd4bf",
+    ramp: ["#04201f", "#0a3d3a", "#11625c", "#1b8a80", "#3cb3a4", "#86d8c9", "#e0fbf5"] },
+  gust: { label: "Gust", unit: "km/h", digits: 1, accent: "#a78bfa",
+    ramp: ["#140b2e", "#2a1a5c", "#43318a", "#6150b2", "#8a7bd3", "#bbb2ea", "#f1eeff"] },
+  visibility: { label: "Visibility", unit: "km", digits: 1, accent: "#94a3b8",
+    ramp: ["#1a1d22", "#2c333b", "#46515c", "#66757f", "#91a19f", "#c3d1c7", "#f0f7ef"] },
+};
+
+const INDIA_BBOX = { lat_min: 6.5, lat_max: 36.5, lon_min: 68.0, lon_max: 97.5 };
+const FIELD_REFRESH_MS = 20 * 60 * 1000;
+
+const hexToRgb = (hex) => {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+};
+
+function rampColor(stops, t) {
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const i = Math.min(Math.floor(x), stops.length - 2);
+  const f = x - i;
+  const a = stops[i], b = stops[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+
+/**
+ * Box to sample.  "Selected state" frames every location in the chosen
+ * location's state (its reference point plus cities), padded; a lone point such
+ * as an AWS station gets a box around itself.  Spans never drop below 4 degrees
+ * so a small UT still shows its surroundings.
+ */
+function fieldBBox() {
+  if (state.fieldExtent === "india" || !state.station) return { ...INDIA_BBOX, label: "All India" };
+
+  const st = state.station;
+  const stateId = st.state_id || null;
+  let pts = stateId ? state.stations.filter((s) => s.state_id === stateId || s.id === stateId) : [];
+  if (!pts.length) pts = [st];
+
+  let latMin = Math.min(...pts.map((p) => p.latitude)) - 0.9;
+  let latMax = Math.max(...pts.map((p) => p.latitude)) + 0.9;
+  let lonMin = Math.min(...pts.map((p) => p.longitude)) - 0.9;
+  let lonMax = Math.max(...pts.map((p) => p.longitude)) + 0.9;
+
+  const MIN_SPAN = 4;
+  if (latMax - latMin < MIN_SPAN) { const c = (latMin + latMax) / 2; latMin = c - MIN_SPAN / 2; latMax = c + MIN_SPAN / 2; }
+  if (lonMax - lonMin < MIN_SPAN) { const c = (lonMin + lonMax) / 2; lonMin = c - MIN_SPAN / 2; lonMax = c + MIN_SPAN / 2; }
+
+  const r = (v) => Math.round(v * 100) / 100;
+  const label = stateId
+    ? (state.stations.find((s) => s.id === stateId) || st).station
+    : `${st.station} surroundings`;
+  return { lat_min: r(latMin), lat_max: r(latMax), lon_min: r(lonMin), lon_max: r(lonMax), label };
+}
+
+/** Replace gaps in the lattice with the mean of their valid neighbours. */
+function fillGaps(values, n) {
+  const out = values.map((row) => row.slice());
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (out[i][j] !== null && !Number.isNaN(out[i][j])) continue;
+        let sum = 0, cnt = 0;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const v = out[i + di]?.[j + dj];
+          if (v !== null && v !== undefined && !Number.isNaN(v)) { sum += v; cnt++; }
+        }
+        if (cnt) { out[i][j] = sum / cnt; changed = true; }
+      }
+    }
+    if (!changed) break;
+  }
+  return out;
+}
+
+/** Marching squares over the upsampled surface, one pass per contour level. */
+function drawContours(ctx, surface, W, H, levels, step) {
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.38)";
+  const at = (x, y) => surface[Math.min(H - 1, y) * W + Math.min(W - 1, x)];
+
+  for (const level of levels) {
+    ctx.beginPath();
+    for (let y = 0; y < H - step; y += step) {
+      for (let x = 0; x < W - step; x += step) {
+        const tl = at(x, y), tr = at(x + step, y), br = at(x + step, y + step), bl = at(x, y + step);
+        const idx = (tl > level ? 8 : 0) | (tr > level ? 4 : 0) | (br > level ? 2 : 0) | (bl > level ? 1 : 0);
+        if (idx === 0 || idx === 15) continue;
+
+        const lerp = (a, b) => (a === b ? 0.5 : (level - a) / (b - a));
+        const top = [x + lerp(tl, tr) * step, y];
+        const right = [x + step, y + lerp(tr, br) * step];
+        const bottom = [x + lerp(bl, br) * step, y + step];
+        const left = [x, y + lerp(tl, bl) * step];
+
+        const seg = (p, q) => { ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); };
+        switch (idx) {
+          case 1: case 14: seg(left, bottom); break;
+          case 2: case 13: seg(bottom, right); break;
+          case 3: case 12: seg(left, right); break;
+          case 4: case 11: seg(top, right); break;
+          case 5: seg(left, top); seg(bottom, right); break;
+          case 6: case 9: seg(top, bottom); break;
+          case 7: case 8: seg(left, top); break;
+          case 10: seg(top, right); seg(left, bottom); break;
+        }
+      }
+    }
+    ctx.stroke();
+  }
+}
+
+function renderFieldTabs() {
+  const current = state.fieldVar || "temperature";
+  document.querySelectorAll(".field-tab").forEach((b) => {
+    const spec = FIELD_VARS[b.dataset.var];
+    const on = b.dataset.var === current;
+    b.className = "field-tab px-3 py-1.5 rounded-lg transition-colors " +
+      (on ? "font-semibold text-space-950" : "text-slate-400 hover:text-slate-200");
+    b.style.background = on ? `linear-gradient(135deg, ${spec.accent}, ${spec.ramp[4]})` : "";
+  });
+  document.querySelectorAll(".extent-pill").forEach((b) => {
+    b.className = b.dataset.extent === (state.fieldExtent || "state")
+      ? "extent-pill px-2.5 py-1 rounded-lg bg-slate-700/50 text-slate-200 border border-slate-600/50"
+      : "extent-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors";
+  });
+}
+
+function renderField() {
+  const g = state.fieldGrid;
+  renderFieldTabs();
+  if (!g) return;
+
+  const varKey = state.fieldVar || "temperature";
+  const spec = FIELD_VARS[varKey];
+  const n = g.n;
+  const raw = g.fields[varKey];
+  const flat = raw.flat().filter((v) => v !== null && !Number.isNaN(v));
+  const status = $("fieldStatus");
+
+  if (!flat.length) {
+    status.hidden = false;
+    status.textContent = `No ${spec.label.toLowerCase()} values returned for this area.`;
+    return;
+  }
+  status.hidden = true;
+
+  const values = fillGaps(raw, n);
+  let lo = Math.min(...flat), hi = Math.max(...flat);
+  if (hi - lo < 1e-6) hi = lo + 1;
+
+  // keep geographic proportions: a degree of longitude shrinks with cos(latitude)
+  const midLat = ((g.lat_min + g.lat_max) / 2) * Math.PI / 180;
+  const aspect = ((g.lon_max - g.lon_min) * Math.cos(midLat)) / (g.lat_max - g.lat_min);
+  const wrap = $("fieldWrap");
+  wrap.style.aspectRatio = `${aspect.toFixed(3)} / 1`;
+
+  const W = 520, H = Math.max(120, Math.round(W / aspect));
+  const canvas = $("fieldCanvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx || !ctx.createImageData) return;
+
+  // bilinear upsampling of the lattice; canvas row 0 is the northern edge
+  const stops = spec.ramp.map(hexToRgb);
+  const surface = new Float32Array(W * H);
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    const fi = (1 - y / (H - 1)) * (n - 1);
+    const i0 = Math.floor(fi), i1 = Math.min(i0 + 1, n - 1), ti = fi - i0;
+    for (let x = 0; x < W; x++) {
+      const fj = (x / (W - 1)) * (n - 1);
+      const j0 = Math.floor(fj), j1 = Math.min(j0 + 1, n - 1), tj = fj - j0;
+      const v =
+        values[i0][j0] * (1 - ti) * (1 - tj) + values[i0][j1] * (1 - ti) * tj +
+        values[i1][j0] * ti * (1 - tj) + values[i1][j1] * ti * tj;
+      surface[y * W + x] = v;
+      const [r, gg, b] = rampColor(stops, (v - lo) / (hi - lo));
+      const k = (y * W + x) * 4;
+      img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const levels = Array.from({ length: 9 }, (_, k) => lo + ((hi - lo) * (k + 1)) / 10);
+  drawContours(ctx, surface, W, H, levels, 4);
+
+  renderFieldLabels(g);
+
+  const mean = flat.reduce((a, b) => a + b, 0) / flat.length;
+  const bbox = state.fieldBox || {};
+  const when = g.observed_at ? g.observed_at.replace("T", " ") + " UTC" : "latest run";
+  $("fieldStats").innerHTML =
+    `Showing <b class="text-slate-200">${esc(bbox.label || "--")}</b> · live ${esc(when)} · ` +
+    `${n} × ${n} grid = <b class="text-slate-200">${g.cells.toLocaleString()}</b> sampled cells · ` +
+    `min <b class="text-slate-200">${fmt(lo, spec.digits)}</b> · mean <b class="text-slate-200">${fmt(mean, spec.digits)}</b> · ` +
+    `max <b class="text-slate-200">${fmt(hi, spec.digits)}</b> ${esc(spec.unit)}`;
+
+  $("fieldLegend").style.background = `linear-gradient(90deg, ${spec.ramp.join(", ")})`;
+  $("fieldLegendMin").textContent = fmt(lo, spec.digits);
+  $("fieldLegendMax").textContent = fmt(hi, spec.digits);
+  $("fieldUnit").textContent = spec.unit;
+  $("fieldFootnote").textContent =
+    `${g.provider} · bilinear surface · contours every ${fmt((hi - lo) / 10, spec.digits || 1)} ${spec.unit.split(",")[0]}`;
+}
+
+/** Place names over the surface, skipping any label that would collide. */
+function renderFieldLabels(g) {
+  const layer = $("fieldLabels");
+  const wrap = $("fieldWrap");
+  const Wpx = wrap.clientWidth || 800, Hpx = wrap.clientHeight || 800;
+  const inside = (s) => s.latitude >= g.lat_min && s.latitude <= g.lat_max &&
+                        s.longitude >= g.lon_min && s.longitude <= g.lon_max;
+
+  const india = state.fieldExtent === "india";
+  const rank = (s) => {
+    if (state.station && s.location === state.station.location) return 0;
+    if (india) return s.kind === "State" ? 1 : s.kind === "UT" ? 2 : 9;
+    return s.kind === "City" ? 1 : s.kind === "State" || s.kind === "UT" ? 2 : 3;
+  };
+  const candidates = (state.stations || [])
+    .filter(inside)
+    .filter((s) => !india || s.kind === "State" || s.kind === "UT" ||
+                   (state.station && s.location === state.station.location))
+    .sort((a, b) => rank(a) - rank(b));
+
+  const placed = [];
+  const html = [];
+  for (const s of candidates) {
+    const xPct = ((s.longitude - g.lon_min) / (g.lon_max - g.lon_min)) * 100;
+    const yPct = ((g.lat_max - s.latitude) / (g.lat_max - g.lat_min)) * 100;
+    const x = (xPct / 100) * Wpx, y = (yPct / 100) * Hpx;
+    const w = s.station.length * 6.4 + 10, h = 16;
+    const box = [x - w / 2, y - h / 2, x + w / 2, y + h / 2];
+    if (placed.some((p) => !(box[2] < p[0] || box[0] > p[2] || box[3] < p[1] || box[1] > p[3]))) continue;
+    placed.push(box);
+
+    const selected = state.station && s.location === state.station.location;
+    html.push(
+      `<div class="absolute -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 whitespace-nowrap"
+            style="left:${xPct.toFixed(2)}%;top:${yPct.toFixed(2)}%">
+         ${selected ? `<span class="w-2 h-2 rounded-full" style="background:#67e8f9;box-shadow:0 0 0 2px #020617"></span>` : ""}
+         <span class="text-[11px] font-semibold"
+               style="color:${selected ? "#cffafe" : "#ffffff"};text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 4px rgba(0,0,0,.85)">${esc(s.station)}</span>
+       </div>`);
+  }
+  layer.innerHTML = html.join("");
+}
+
+async function refreshField(force = false) {
+  if (!$("fieldCanvas")) return;
+  const box = fieldBBox();
+  // 20x20 over India (5 batches) stays well inside the per-minute quota and
+  // reads just as smooth once interpolated; a state box gets a finer 22x22
+  const n = state.fieldExtent === "india" ? 20 : 22;
+  const key = [box.lat_min, box.lat_max, box.lon_min, box.lon_max, n].join("|");
+
+  if (!force && state.fieldKey === key && state.fieldGrid) {
+    renderField();
+    return;
+  }
+
+  state.fieldKey = key;
+  state.fieldBox = box;
+  const status = $("fieldStatus");
+  status.hidden = false;
+  status.textContent = `Sampling ${n * n} live grid cells over ${box.label}...`;
+  renderFieldTabs();
+
+  try {
+    const grid = await api("/api/field", {
+      lat_min: box.lat_min, lat_max: box.lat_max, lon_min: box.lon_min, lon_max: box.lon_max, n,
+    });
+    if (state.fieldKey !== key) return;          // the user moved on meanwhile
+    state.fieldGrid = grid;
+    state.last.field = { bbox: box, observed_at: grid.observed_at, cells: grid.cells };
+    renderField();
+  } catch (err) {
+    console.error(err);
+    if (state.fieldKey !== key) return;
+    status.hidden = false;
+    status.textContent = "Live field unavailable right now - the rest of the dashboard is unaffected.";
+  }
+}
+
+function wireFieldMaps() {
+  $("fieldTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".field-tab");
+    if (!btn) return;
+    state.fieldVar = btn.dataset.var;       // same grid, different variable: no refetch
+    renderField();
+  });
+
+  $("fieldExtent").addEventListener("click", (e) => {
+    const btn = e.target.closest(".extent-pill");
+    if (!btn) return;
+    state.fieldExtent = btn.dataset.extent;
+    refreshField();
+  });
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => state.fieldGrid && renderFieldLabels(state.fieldGrid), 150);
+  });
+
+  setInterval(() => refreshField(true), FIELD_REFRESH_MS);
+  renderFieldTabs();
+}
+
 /* ----------------------------------------------------- league table (rank) */
 const LEAGUE_COLUMNS = [
   { key: "station", label: "Location", align: "left", type: "text" },
@@ -713,7 +1089,7 @@ function sparkline(values, lo, hi) {
     `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="1.7" fill="${tempColor(v, lo, hi)}"></circle>`).join("");
 
   return `<svg width="${w}" height="${h}" class="overflow-visible">
-    <path d="${path}" fill="none" stroke="rgba(148,163,184,.45)" stroke-width="1"></path>${dots}</svg>`;
+    <path d="${path}" fill="none" stroke="${T().spark}" stroke-width="1"></path>${dots}</svg>`;
 }
 
 function renderLeagueTable() {
@@ -1046,6 +1422,10 @@ async function selectStation(location) {
   renderLeagueTable();
   const series = await loadStationAnalytics(state.station.location);
   await refreshLive();
+  // The grid is several hundred weighted API units; sample it only once the
+  // live card has its reading, so the map can never starve the core panel.
+  // Not awaited - the rest of the dashboard does not wait on the map.
+  refreshField();
   if (state.last.forecast) renderSeries(series, state.last.forecast, state.last.live);
   scheduleRefresh();
 }
@@ -1065,8 +1445,11 @@ async function init() {
 
   // Controls are wired before any data is fetched, so the dashboard stays
   // interactive even if an endpoint or the provider is down.
-  wireEvents();
-  wireLeagueTable();
+  // Wire each panel independently: one failing (a missing element, an API the
+  // browser lacks) must not stop the others or the data load below it.
+  for (const wire of [wireEvents, wireLeagueTable, wireFieldMaps]) {
+    try { wire(); } catch (err) { console.error(`${wire.name} failed:`, err); }
+  }
 
   await loadStatic();
 
@@ -1081,9 +1464,50 @@ async function init() {
   renderStationMap();
 }
 
+/* ------------------------------------------------------------ theme toggle */
+function syncThemeButton() {
+  const btn = $("themeToggle");
+  if (!btn) return;
+  const next = currentTheme() === "light" ? "dark" : "light";
+  btn.title = `Switch to ${next} theme`;
+  btn.setAttribute("aria-label", `Switch to ${next} theme`);
+}
+
+/**
+ * Switch theme and repaint everything JavaScript coloured directly.  Charts and
+ * canvas surfaces bake their colours in when drawn, so each panel is re-rendered
+ * from the data it last showed - no refetch.
+ */
+function setTheme(theme) {
+  document.documentElement.className = theme;
+  try { localStorage.setItem("aethercast-theme", theme); } catch (e) { /* private mode */ }
+  applyChartTheme();
+  syncThemeButton();
+
+  const L = state.last;
+  const repaint = [
+    () => L.dist && L.stats && renderDistribution(L.dist, L.stats),
+    () => L.corr && renderCorrelation(L.corr),
+    () => L.reg && renderRegression(L.reg),
+    () => L.agg && L.enc && renderAggregation(L.agg, L.enc),
+    () => L.heat && renderHeatmap(L.heat),
+    () => L.series && L.forecast && renderSeries(L.series, L.forecast, L.live),
+    () => L.live && renderLive(L.live),
+    () => state.stations.length && renderStationMap(),
+    () => state.stations.length && renderLeagueTable(),
+    () => state.fieldGrid && renderField(),
+  ];
+  for (const paint of repaint) {
+    try { paint(); } catch (err) { console.error("theme repaint failed:", err); }
+  }
+}
+
 function wireEvents() {
   $("stationSelect").addEventListener("change", (e) => selectStation(e.target.value));
   $("refreshBtn").addEventListener("click", refreshLive);
+  syncThemeButton();
+  $("themeToggle").addEventListener("click", () =>
+    setTheme(currentTheme() === "light" ? "dark" : "light"));
 
   $("rangePills").addEventListener("click", (e) => {
     const btn = e.target.closest(".range-pill");

@@ -4,6 +4,21 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Aethercast Intelligence &amp; Atmospheric Data Lab</title>
+<script>
+  // Pick the theme before anything paints, so a light-theme reader never sees a
+  // dark flash.  Order: ?theme= in the URL, then the saved choice, then the OS.
+  (function () {
+    var theme = "dark";
+    try {
+      var fromUrl = new URLSearchParams(location.search).get("theme");
+      var saved = localStorage.getItem("aethercast-theme");
+      if (fromUrl === "light" || fromUrl === "dark") theme = fromUrl;
+      else if (saved === "light" || saved === "dark") theme = saved;
+      else if (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches) theme = "light";
+    } catch (e) {}
+    document.documentElement.className = theme;
+  })();
+</script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 <script>
@@ -67,6 +82,121 @@
   .panel-title { font-size: 0.9rem; letter-spacing: 0.06em; }
   .section-label { font-size: 0.65rem; letter-spacing: 0.22em; }
   html { scroll-behavior: smooth; scroll-padding-top: 8.5rem; }
+  html.dark { color-scheme: dark; }
+  .theme-icon-sun { display: none; }
+  html.light .theme-icon-sun { display: block; }
+  html.light .theme-icon-moon { display: none; }
+</style>
+
+<style id="theme-light">
+  /* =====================================================================
+     Light theme.  The markup is written with dark utility classes; under
+     html.light each one is remapped to the light design spec: white
+     instrument cards on a slate-50 canvas, hairline slate-200 borders, deep
+     slate text, and 600-weight accents that keep their contrast on white.
+     scripts/check_theme.py fails if a colour class is used without a rule.
+     ===================================================================== */
+  html.light { color-scheme: light; }
+
+  html.light ::-webkit-scrollbar-track { background: #f1f5f9; }
+  html.light ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+  html.light ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+  html.light .glass-panel {
+    background: #ffffff; border: 1px solid #e2e8f0;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    box-shadow: 0 1px 3px 0 rgba(15,23,42,.05), 0 1px 2px -1px rgba(15,23,42,.04);
+  }
+  html.light .glass-panel-subtle { background: #ffffff; border: 1px solid #e2e8f0; backdrop-filter: none; }
+  html.light .glow-cyan-box { box-shadow: 0 0 16px -2px rgba(2,132,199,.2); }
+  html.light .glow-blue-box { box-shadow: 0 0 16px -2px rgba(37,99,235,.2); }
+  html.light .dot-grid-bg { background-image: radial-gradient(rgba(148,163,184,.28) 1px, transparent 1px); }
+  html.light .skeleton { background: linear-gradient(90deg,#e2e8f0,#f1f5f9,#e2e8f0); background-size: 200% 100%; }
+  html.light header { background-color: rgba(255,255,255,.9); box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+  html.light ::selection { background: rgba(14,165,233,.2); color: #0c4a6e; }
+
+  /* surfaces */
+  html.light .bg-space-950 { background-color: #f8fafc; }
+  html.light .bg-space-950\/60, html.light .bg-space-950\/70,
+  html.light .bg-space-950\/80 { background-color: rgba(241,245,249,.85); }
+  html.light .bg-space-900, html.light .bg-space-900\/50, html.light .bg-space-900\/70,
+  html.light .bg-space-900\/80, html.light .bg-space-900\/90 { background-color: #f8fafc; }
+  html.light .bg-space-900\/95 { background-color: rgba(255,255,255,.96); }
+  html.light .bg-space-850, html.light .bg-space-850\/80 { background-color: #f1f5f9; }
+  html.light .bg-space-800, html.light .bg-slate-800 { background-color: #e2e8f0; }
+  html.light .hover\:bg-space-800\/50:hover, html.light .hover\:bg-space-800\/60:hover { background-color: #f1f5f9; }
+  html.light .hover\:bg-space-700:hover { background-color: #e2e8f0; }
+  html.light .bg-slate-700\/30, html.light .bg-slate-700\/40 { background-color: #f1f5f9; }
+  html.light .bg-slate-700\/50 { background-color: #ffffff; box-shadow: 0 1px 2px rgba(15,23,42,.08); }
+  html.light .bg-slate-500\/15 { background-color: #f1f5f9; }
+
+  /* tinted accent surfaces */
+  html.light .bg-cyan-500\/10, html.light .bg-cyan-500\/15, html.light .bg-cyan-500\/20,
+  html.light .bg-cyan-500\/30, html.light .bg-cyan-950\/60 { background-color: #e0f2fe; }
+  html.light .bg-blue-500\/10, html.light .bg-blue-500\/20 { background-color: #dbeafe; }
+  html.light .bg-blue-600\/30, html.light .bg-blue-600\/40 { background-color: #e0f2fe; }
+  html.light .hover\:bg-blue-600\/60:hover { background-color: #bae6fd; }
+  html.light .bg-violet-500\/10, html.light .bg-violet-500\/15, html.light .bg-violet-500\/20 { background-color: #ede9fe; }
+  html.light .bg-emerald-500\/10 { background-color: #ecfdf5; }
+  html.light .hover\:bg-amber-400\/10:hover { background-color: #fffbeb; }
+  html.light .bg-cyanGlow\/10 { background-color: rgba(14,165,233,.10); }
+
+  /* solid accents - indicator dots, bars */
+  html.light .bg-cyan-300, html.light .bg-cyan-400, html.light .bg-cyanGlow { background-color: #0284c7; }
+  html.light .bg-blue-500 { background-color: #2563eb; }
+  html.light .bg-emerald-400 { background-color: #059669; }
+  html.light .bg-amber-400 { background-color: #d97706; }
+  html.light .bg-violet-400, html.light .bg-violetGlow { background-color: #7c3aed; }
+
+  /* text */
+  html.light .text-white, html.light .text-slate-100, html.light .text-slate-200 { color: #0f172a; }
+  html.light .text-slate-300 { color: #334155; }
+  html.light .text-slate-400 { color: #475569; }
+  html.light .text-slate-500 { color: #64748b; }
+  html.light .text-slate-600 { color: #94a3b8; }
+  html.light .hover\:text-slate-200:hover { color: #0f172a; }
+  html.light .placeholder-slate-500::placeholder { color: #94a3b8; }
+  html.light .text-cyan-100, html.light .text-cyan-200, html.light .text-cyan-300 { color: #0369a1; }
+  html.light .text-cyan-400 { color: #0284c7; }
+  html.light .text-cyan-400\/70 { color: rgba(2,132,199,.85); }
+  html.light .hover\:text-cyan-300:hover { color: #0369a1; }
+  html.light .text-blue-400 { color: #2563eb; }
+  html.light .text-emerald-300, html.light .text-emerald-400 { color: #047857; }
+  html.light .text-amber-300, html.light .text-amber-400 { color: #b45309; }
+  html.light .text-rose-300, html.light .text-rose-400 { color: #be123c; }
+  html.light .text-violet-300, html.light .text-violet-400 { color: #6d28d9; }
+  html.light .text-yellow-300 { color: #a16207; }
+
+  /* borders */
+  html.light .border-slate-800, html.light .border-slate-800\/40, html.light .border-slate-800\/50,
+  html.light .border-slate-800\/60, html.light .border-slate-800\/80 { border-color: #e2e8f0; }
+  html.light .border-slate-700, html.light .border-slate-700\/60, html.light .border-slate-700\/70,
+  html.light .border-slate-600\/50, html.light .border-slate-500\/40 { border-color: #cbd5e1; }
+  html.light .border-cyan-500\/30, html.light .border-cyan-800\/60 { border-color: #bae6fd; }
+  html.light .border-cyan-500\/40, html.light .border-cyan-400\/60 { border-color: #7dd3fc; }
+  html.light .border-cyan-400 { border-color: #0284c7; }
+  html.light .border-blue-500\/20, html.light .border-blue-500\/30, html.light .border-blue-500\/40 { border-color: #bfdbfe; }
+  html.light .border-emerald-500\/30, html.light .border-emerald-500\/40 { border-color: #a7f3d0; }
+  html.light .border-violet-500\/30 { border-color: #ddd6fe; }
+  html.light .border-rose-500\/40 { border-color: #fecaca; }
+  html.light .hover\:border-cyan-500\/40:hover { border-color: #38bdf8; }
+  html.light .hover\:border-blue-500\/40:hover { border-color: #60a5fa; }
+  html.light .hover\:border-emerald-500\/40:hover { border-color: #34d399; }
+  html.light .hover\:border-violet-500\/40:hover { border-color: #a78bfa; }
+  html.light .focus\:border-cyan-500\/70:focus { border-color: #0284c7; }
+  html.light .focus\:ring-cyan-500\/40:focus { --tw-ring-color: rgba(2,132,199,.35); }
+  html.light .ring-slate-950 { --tw-ring-color: #ffffff; }
+  html.light .shadow-cyan-500\/20 { --tw-shadow-color: rgba(14,165,233,.15); }
+  html.light .shadow-amber-400 { --tw-shadow-color: rgba(217,119,6,.35); }
+
+  /* SVG decoration painted through presentation attributes */
+  html.light #mapCanvasWrap svg path { stroke: #94a3b8; }
+  html.light svg path[stroke="#1e293b"], html.light svg line[stroke="#1e293b"] { stroke: #e2e8f0; }
+  html.light svg path[stroke="#334155"] { stroke: #cbd5e1; }
+  html.light svg circle[stroke="#070a13"] { stroke: #ffffff; }
+  html.light .radar-sweep > div {
+    background: conic-gradient(from 180deg at 100% 100%, rgba(2,132,199,.20) 0deg, transparent 65deg) !important;
+  }
 </style>
 </head>
 <body class="bg-space-950 text-slate-200 min-h-screen font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -129,6 +259,17 @@
           <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round"></path>
         </svg>
         <span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+      </button>
+
+      <button id="themeToggle" type="button" aria-label="Switch to light theme" title="Switch to light theme"
+              class="p-2 rounded-xl text-slate-400 hover:text-cyan-300 transition-colors border border-slate-800 bg-space-850">
+        <svg class="w-4 h-4 theme-icon-moon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <svg class="w-4 h-4 theme-icon-sun" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke-linecap="round"></path>
+        </svg>
       </button>
 
       <button id="refreshBtn" class="p-2 rounded-xl text-slate-400 hover:text-cyan-300 transition-colors border border-slate-800 bg-space-850" title="Refresh now">
@@ -258,6 +399,54 @@
   <!-- ================== 2. GEOSPATIAL GRID (full width) ================== -->
   <section id="sec-geo" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">02 &mdash; Geospatial network</div>
+
+    <!-- live gridded field maps -->
+    <div class="glass-panel panel">
+      <div class="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-slate-800">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+            <h2 class="panel-title font-mono font-semibold uppercase text-white">Geospatial Field Maps</h2>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">Live surface fields sampled on a regular grid, interpolated into a continuous map and contoured</p>
+        </div>
+        <div class="flex items-center gap-1 bg-space-900/90 p-1 rounded-xl border border-slate-800 text-xs font-mono" id="fieldExtent">
+          <button data-extent="state" class="extent-pill px-2.5 py-1 rounded-lg bg-slate-700/50 text-slate-200 border border-slate-600/50">Selected state</button>
+          <button data-extent="india" class="extent-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">All India</button>
+        </div>
+      </div>
+
+      <div class="mt-5 flex flex-wrap items-center gap-3">
+        <span class="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-500">Variable</span>
+        <div class="flex flex-wrap items-center gap-1 bg-space-900/90 p-1 rounded-xl border border-slate-800 text-xs font-mono" id="fieldTabs">
+          <button data-var="temperature" class="field-tab px-3 py-1.5 rounded-lg">Temperature</button>
+          <button data-var="humidity" class="field-tab px-3 py-1.5 rounded-lg">Humidity</button>
+          <button data-var="rain" class="field-tab px-3 py-1.5 rounded-lg">Rain</button>
+          <button data-var="wind" class="field-tab px-3 py-1.5 rounded-lg">Wind</button>
+          <button data-var="gust" class="field-tab px-3 py-1.5 rounded-lg">Gust</button>
+          <button data-var="visibility" class="field-tab px-3 py-1.5 rounded-lg">Visibility</button>
+        </div>
+      </div>
+      <div class="mt-3 text-xs font-mono text-slate-400 leading-relaxed" id="fieldStats">--</div>
+
+      <div class="mt-5 mx-auto w-full max-w-[860px]">
+        <div class="relative w-full rounded-xl overflow-hidden border border-slate-800 bg-space-950" id="fieldWrap" style="aspect-ratio: 1 / 1;">
+          <canvas id="fieldCanvas" class="absolute inset-0 w-full h-full"></canvas>
+          <div id="fieldLabels" class="absolute inset-0 pointer-events-none"></div>
+          <div id="fieldStatus" class="absolute inset-0 flex items-center justify-center text-xs font-mono text-slate-400 bg-space-950/70">Loading live field...</div>
+        </div>
+      </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-[11px] font-mono text-slate-400">
+        <div class="flex items-center gap-3">
+          <span id="fieldLegendMin">--</span>
+          <div id="fieldLegend" class="w-64 h-3 rounded border border-slate-700/60"></div>
+          <span id="fieldLegendMax">--</span>
+          <span id="fieldUnit" class="text-slate-500"></span>
+        </div>
+        <span id="fieldFootnote">--</span>
+      </div>
+    </div>
 
     <div class="glass-panel panel dot-grid-bg relative overflow-hidden">
       <div class="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-slate-800">

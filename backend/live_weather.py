@@ -91,9 +91,23 @@ def _open_meteo(lat: float, lon: float) -> dict:
         "past_days": 2,
         "wind_speed_unit": "kmh",
     }
-    r = requests.get(FORECAST_URL, params=params, timeout=15)
-    r.raise_for_status()
-    return r.json()
+    # The live reading is the core panel, and it shares the provider's
+    # per-minute quota with the field-map grids - so ride out a brief 429
+    # rather than failing the whole live card on one throttled call.
+    for attempt in range(1, 4):
+        try:
+            r = requests.get(FORECAST_URL, params=params, timeout=15)
+        except requests.RequestException:
+            if attempt == 3:
+                raise
+            time.sleep(1.5 * attempt)
+            continue
+        if (r.status_code == 429 or r.status_code >= 500) and attempt < 3:
+            time.sleep(1.5 * attempt)
+            continue
+        r.raise_for_status()
+        return r.json()
+    raise RuntimeError("live weather fetch exhausted its retries")
 
 
 def _air_quality(lat: float, lon: float) -> dict:

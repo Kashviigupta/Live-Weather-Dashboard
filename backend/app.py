@@ -202,6 +202,16 @@ def categorical(location: str = Query("ALL")):
     return analysis.categorical_encoding(st["location"])
 
 
+@app.get("/api/field")
+def field(lat_min: float, lat_max: float, lon_min: float, lon_max: float, n: int = 20):
+    """Live gridded surface fields for the geospatial maps (see fieldgrid.py)."""
+    import fieldgrid
+    try:
+        return fieldgrid.fetch_grid(lat_min, lat_max, lon_min, lon_max, n)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Field grid unavailable: {exc}")
+
+
 @app.get("/api/health")
 def health():
     q = analysis.data_quality_report()

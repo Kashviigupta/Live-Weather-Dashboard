@@ -84,7 +84,18 @@
     });
 
     const [data, aqRes] = await Promise.all([
-      fetch(`${FORECAST_URL}?${q}`).then((r) => r.json()),
+      // retry a throttled live call: it shares the quota with the field grids
+      (async () => {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const r = await fetch(`${FORECAST_URL}?${q}`);
+          if (r.ok) return r.json();
+          if ((r.status === 429 || r.status >= 500) && attempt < 3) {
+            await new Promise((res) => setTimeout(res, 1500 * attempt));
+            continue;
+          }
+          throw new Error(`live weather HTTP ${r.status}`);
+        }
+      })(),
       fetch(`${AIR_QUALITY_URL}?` + new URLSearchParams({
         latitude: station.latitude, longitude: station.longitude,
         current: "pm10,pm2_5,european_aqi,us_aqi,uv_index", timezone: "auto",
@@ -219,9 +230,89 @@
     };
   }
 
+  /* --------------------------------------------- live gridded field maps */
+  // Mirrors backend/fieldgrid.py: an n x n lattice fetched 90 points per
+  // request, cached per bounding box for 20 minutes.
+  const fieldCache = new Map();
+  const FIELD_TTL_MS = 20 * 60 * 1000;
+  const FIELD_VARS = ["temperature", "humidity", "rain", "wind", "gust", "visibility"];
+
+  function pickField(entry, v) {
+    const cur = entry.current || {};
+    if (v === "temperature") return cur.temperature_2m ?? null;
+    if (v === "humidity") return cur.relative_humidity_2m ?? null;
+    if (v === "wind") return cur.wind_speed_10m ?? null;
+    if (v === "gust") return cur.wind_gusts_10m ?? null;
+    if (v === "visibility") return cur.visibility == null ? null : Math.round(cur.visibility / 10) / 100;
+    if (v === "rain") {
+      const sums = (entry.daily || {}).precipitation_sum || [];
+      return sums.length ? sums[0] : null;          // the previous full day
+    }
+    return null;
+  }
+
+  async function fetchField(params) {
+    const n = Math.max(4, Math.min(parseInt(params.n || 20, 10), 28));
+    const latMin = Math.min(+params.lat_min, +params.lat_max);
+    const latMax = Math.max(+params.lat_min, +params.lat_max);
+    const lonMin = Math.min(+params.lon_min, +params.lon_max);
+    const lonMax = Math.max(+params.lon_min, +params.lon_max);
+
+    const key = [latMin, latMax, lonMin, lonMax, n].map((v) => (+v).toFixed(2)).join("|");
+    const hit = fieldCache.get(key);
+    if (hit && Date.now() - hit.at < FIELD_TTL_MS) return hit.data;
+
+    const axis = (lo, hi) =>
+      Array.from({ length: n }, (_, k) => +(lo + ((hi - lo) * k) / (n - 1)).toFixed(4));
+    const lats = axis(latMin, latMax), lons = axis(lonMin, lonMax);
+    const points = [];
+    for (const la of lats) for (const lo of lons) points.push([la, lo]);
+
+    // Batches go out one after another with a short gap, and a throttled batch
+    // is retried with backoff: a whole grid is several hundred weighted units,
+    // so firing every batch at once can trip the per-minute limit on its own.
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const results = [];
+    for (let s = 0; s < points.length; s += 90) {
+      if (s) await sleep(300);
+      const chunk = points.slice(s, s + 90);
+      const q = new URLSearchParams({
+        latitude: chunk.map((p) => p[0]).join(","),
+        longitude: chunk.map((p) => p[1]).join(","),
+        current: "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,visibility",
+        daily: "precipitation_sum", past_days: 1, forecast_days: 1,
+        timezone: "UTC", wind_speed_unit: "kmh",
+      });
+
+      let data = null;
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        const r = await fetch(`${FORECAST_URL}?${q}`);
+        if (r.ok) { data = await r.json(); break; }
+        if ((r.status === 429 || r.status >= 500) && attempt < 4) { await sleep(1500 * attempt); continue; }
+        throw new Error(`field grid HTTP ${r.status}`);
+      }
+      results.push(...(Array.isArray(data) ? data : [data]));
+    }
+    if (results.length !== points.length) throw new Error("field grid came back incomplete");
+
+    const fields = {};
+    for (const v of FIELD_VARS) {
+      fields[v] = lats.map((_, i) => lons.map((_, j) => pickField(results[i * n + j], v)));
+    }
+    const data = {
+      lat_min: latMin, lat_max: latMax, lon_min: lonMin, lon_max: lonMax,
+      n, cells: n * n, lats, lons,
+      observed_at: ((results[0] || {}).current || {}).time || null,
+      fields, provider: "Open-Meteo (browser)",
+    };
+    fieldCache.set(key, { at: Date.now(), data });
+    return data;
+  }
+
   /* ------------------------------------------------------------ dispatch */
   window.StaticSource = {
     async get(path, params = {}) {
+      if (path === "/api/field") return fetchField(params);
       const location = params.location;
 
       switch (path) {
