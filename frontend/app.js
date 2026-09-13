@@ -73,16 +73,23 @@ function corrColor(r) {
     : `background:rgba(225,29,72,${0.15 + a * 0.7});color:#ffe4e6`;
 }
 
-/* Chart.js shared look */
-Chart.defaults.color = "#94a3b8";
-Chart.defaults.font.family = "ui-monospace, SFMono-Regular, Consolas, monospace";
-Chart.defaults.font.size = 10;
-Chart.defaults.plugins.legend.display = false;
-Chart.defaults.maintainAspectRatio = false;
+/* Chart.js shared look. The library is a CDN script, so treat it as optional:
+   if it failed to load, every other panel must still render and the controls
+   must still work. */
+const HAS_CHARTS = typeof Chart !== "undefined";
+
+if (HAS_CHARTS) {
+  Chart.defaults.color = "#94a3b8";
+  Chart.defaults.font.family = "ui-monospace, SFMono-Regular, Consolas, monospace";
+  Chart.defaults.font.size = 10;
+  Chart.defaults.plugins.legend.display = false;
+  Chart.defaults.maintainAspectRatio = false;
+}
 
 const gridStyle = { color: "rgba(31,48,86,0.55)", drawTicks: false };
 
 function drawChart(key, canvasId, config) {
+  if (!HAS_CHARTS) return;
   if (state.charts[key]) state.charts[key].destroy();
   state.charts[key] = new Chart($(canvasId).getContext("2d"), config);
 }
@@ -741,6 +748,16 @@ function scheduleRefresh() {
 
 /* ------------------------------------------------------------------ init */
 async function init() {
+  if (!HAS_CHARTS) {
+    console.warn("Chart.js did not load - charts are disabled, panels still work.");
+    $("seriesSubtitle").textContent =
+      "Chart library unavailable (offline or CDN blocked) - numeric panels below still update.";
+  }
+
+  // Controls are wired before any data is fetched, so the dashboard stays
+  // interactive even if an endpoint or the provider is down.
+  wireEvents();
+
   await loadStatic();
 
   const { stations } = await api("/api/stations");
@@ -752,8 +769,9 @@ async function init() {
 
   await selectStation(stations[0].location);
   renderStationMap();
+}
 
-  /* events */
+function wireEvents() {
   $("stationSelect").addEventListener("change", (e) => selectStation(e.target.value));
   $("refreshBtn").addEventListener("click", refreshLive);
 
@@ -784,6 +802,7 @@ async function init() {
 
   $("distColumn").addEventListener("change", async (e) => {
     state.distColumn = e.target.value;
+    if (!state.station) return;
     const location = state.station.location;
     const [stats, dist] = await Promise.all([
       api("/api/stats", { location, column: state.distColumn }),
@@ -794,6 +813,7 @@ async function init() {
 
   $("heatMetric").addEventListener("change", async (e) => {
     state.heatMetric = e.target.value;
+    if (!state.station) return;
     renderHeatmap(await api("/api/heatmap", { location: state.station.location, metric: state.heatMetric }));
   });
 
@@ -804,6 +824,7 @@ async function init() {
   $("closeDiagnostics").addEventListener("click", () => $("diagnosticsPanel").classList.add("hidden"));
 
   $("exportJson").addEventListener("click", () => {
+    if (!state.station) return;
     const blob = new Blob([JSON.stringify(state.last, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Check the page's CDN references resolve
+        run: python scripts/check_assets.py
+
       - name: Run the Exp 1-5 analysis and freeze it to JSON
         run: python scripts/build_static.py --out docs
 
