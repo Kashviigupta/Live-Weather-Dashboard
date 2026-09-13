@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import analysis  # noqa: E402
 import live_weather  # noqa: E402
+import regions  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -38,8 +39,20 @@ app.add_middleware(
 )
 
 
+def _catalogue() -> list:
+    """Every selectable location: the 30 AWS stations plus every state / UT."""
+    return analysis.station_catalogue() + regions.region_catalogue()
+
+
 def _station(location: str):
-    """Resolve a location string to a station record from the dataset."""
+    """Resolve a location string to a station or region record."""
+    if regions.is_region(location):
+        region_id = location.split(":", 1)[1]
+        for r in regions.region_catalogue():
+            if r["id"] == region_id:
+                return r
+        raise HTTPException(status_code=404, detail=f"Unknown region: {region_id}")
+
     stations = analysis.station_catalogue()
     if not location or location == "ALL":
         return stations[0]
@@ -52,7 +65,7 @@ def _station(location: str):
 # ------------------------------------------------------------------ meta
 @app.get("/api/stations")
 def stations():
-    return {"stations": analysis.station_catalogue()}
+    return {"stations": _catalogue()}
 
 
 @app.get("/api/schema")
@@ -107,6 +120,7 @@ def live(location: str = Query("ALL")):
         "station": st,
         "observation": obs,
         "normals": normals,
+        "archive": analysis.data_source(st["location"]),
         "departure_reference_c": reference,
         "departure_tmax_c": departure,
         "severity": severity,

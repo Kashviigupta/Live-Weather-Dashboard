@@ -130,6 +130,37 @@ live temperature minus the station's `normal_tmax_c` for this calendar window
 | `GET /api/heatmap?location=&metric=` | month × year matrix |
 | `GET /api/categorical?location=` | ordinal encodings + frequency listing |
 
+## Locations
+
+The selector carries **66 locations in two groups**:
+
+- **30 AWS stations** — your `Climate_final_k.csv` archive.
+- **36 states and union territories** — every Indian state/UT, at its capital's
+  coordinates.
+
+States have no rows in the CSV, so [backend/regions.py](backend/regions.py)
+pulls their real 2019–2024 daily history from the Open-Meteo reanalysis and
+reshapes it into *exactly* the dataset schema: same column names, the same
+category bands (`Cool`/`Warm`/`Hot`/`Very Hot` at 25/35/40 °C, wind at
+6/12/20 km/h, pressure at 1000/1013 hPa, all read off your CSV), the same
+seasons, day-of-year normals computed over a ±7-day window, and departure /
+heatwave / alert fields derived from those normals with the IMD rule
+(departure ≥ 4.5 °C on a day already hot for the terrain).
+
+Because the frame matches, `analysis.py` runs unchanged — regression,
+correlation, distribution, aggregation, heatmap and the harmonic forecast are
+computed by the same Exp 1–5 code for both sources. A badge in the header
+always says which archive is behind the numbers on screen, and the geospatial
+grid draws stations as circles and states as diamonds, with a scope filter.
+
+One useful side effect: for states, the normals and the live feed come from the
+same provider, so departures are internally consistent and severity reads
+true — unlike the dataset stations, where the archive's normals run cooler than
+the live provider (see the note above).
+
+Archives are cached under `data/cache/regions/` (gitignored, ~18 MB) and in CI
+via `actions/cache`, so only the first build pays the fetch cost.
+
 ## Dataset
 
 `data/Climate_final_k.csv` — **65,760 daily records × 35 attributes across 30

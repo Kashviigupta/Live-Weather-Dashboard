@@ -13,6 +13,7 @@ const state = {
   stations: [],
   range: "live",
   layer: "temp",
+  scope: "all",
   distColumn: "tmax_c",
   heatMetric: "tmax_c",
   timer: null,
@@ -129,10 +130,21 @@ function renderLive(data) {
   const n = data.normals;
   state.last.live = data;
 
+  const isRegion = st.source === "open-meteo-archive";
   $("stationTitle").classList.remove("skeleton");
-  $("stationTitle").textContent = `Station ${st.station} - ${st.state}`;
+  $("stationTitle").textContent = isRegion
+    ? `${st.station} (${st.kind})`
+    : `Station ${st.station} - ${st.state}`;
   $("stationCoords").textContent =
     `Lat: ${st.latitude.toFixed(4)} | Lon: ${st.longitude.toFixed(4)} | Alt: ${st.elevation_m} m ASL | ${st.terrain_type} / ${st.zone}`;
+
+  const badge = $("sourceBadge");
+  const archive = data.archive || {};
+  badge.textContent = archive.label || "--";
+  badge.title = archive.detail || "";
+  badge.className = "text-[10px] px-2 py-0.5 rounded-full font-mono border " + (isRegion
+    ? "bg-violet-500/10 text-violet-300 border-violet-500/30"
+    : "bg-cyan-500/10 text-cyan-300 border-cyan-500/30");
 
   $("observedAt").textContent = `ISO 8601: ${(obs.observed_at || "").replace("T", " ")} ${obs.timezone || ""}`;
   $("liveTemp").textContent = fmt(obs.temperature_c, 1);
@@ -309,7 +321,14 @@ function renderGauges(obs, normals) {
 /* ------------------------------------------------------- geospatial grid */
 function renderStationMap() {
   const layer = $("stationLayer");
-  const stations = state.stations;
+  const all = state.stations;
+  if (!all.length) return;
+
+  // the scope pills filter which source is plotted; the selected location is
+  // always drawn so it never disappears from under the user
+  const stations = all.filter((s) =>
+    state.scope === "all" || s.source === state.scope ||
+    (state.station && s.location === state.station.location));
   if (!stations.length) return;
 
   const lats = stations.map((s) => s.latitude), lons = stations.map((s) => s.longitude);
@@ -332,12 +351,17 @@ function renderStationMap() {
     const v = metricOf(s);
     const color = tempColor(v, lo, hi);
     const active = state.station && s.location === state.station.location;
-    const size = active ? 14 : 10;
-    return `<div class="absolute flex flex-col items-center group cursor-pointer" style="left:${x.toFixed(2)}%; top:${y.toFixed(2)}%; transform: translate(-50%,-50%);"
+    const isRegion = s.source === "open-meteo-archive";
+    const size = active ? 16 : 11;
+    // regions are drawn as diamonds so the two sources stay distinguishable
+    const shape = isRegion
+      ? `clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); border-radius:0;`
+      : `border-radius:9999px;`;
+    return `<div class="absolute flex flex-col items-center group cursor-pointer" style="left:${x.toFixed(2)}%; top:${y.toFixed(2)}%; transform: translate(-50%,-50%); z-index:${active ? 20 : 10};"
                  data-location="${s.location.replace(/"/g, "&quot;")}">
-      ${active ? `<span class="absolute rounded-full animate-ping" style="width:${size}px;height:${size}px;background:${color};opacity:.7"></span>` : ""}
-      <span class="station-dot rounded-full border-2 border-space-950 relative" style="width:${size}px;height:${size}px;background:${color};box-shadow:0 0 10px ${color}"></span>
-      <div class="mt-1 px-1.5 py-0.5 rounded bg-space-900/90 border ${active ? "border-cyan-400/60 text-cyan-200" : "border-slate-700 text-slate-300"} text-[9px] font-mono whitespace-nowrap ${active ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}">
+      ${active ? `<span class="absolute animate-ping" style="width:${size}px;height:${size}px;background:${color};opacity:.7;${shape}"></span>` : ""}
+      <span class="station-dot relative" style="width:${size}px;height:${size}px;background:${color};box-shadow:0 0 10px ${color};${shape}"></span>
+      <div class="mt-1.5 px-2 py-0.5 rounded bg-space-900/95 border ${active ? "border-cyan-400/60 text-cyan-200" : "border-slate-700 text-slate-300"} text-[9px] font-mono whitespace-nowrap ${active ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}">
         ${s.station}: ${fmt(v, unit === "m" || unit === "days" ? 0 : 1)} ${unit}
       </div>
     </div>`;
@@ -350,8 +374,10 @@ function renderStationMap() {
     });
   });
 
+  const nStations = stations.filter((s) => s.source === "climate-final-k").length;
   $("mapExtent").textContent =
-    `Extent: ${minLat.toFixed(1)}-${maxLat.toFixed(1)} N, ${minLon.toFixed(1)}-${maxLon.toFixed(1)} E | ${stations.length} AWS nodes | equirectangular`;
+    `Extent: ${minLat.toFixed(1)}-${maxLat.toFixed(1)} N, ${minLon.toFixed(1)}-${maxLon.toFixed(1)} E | ` +
+    `${nStations} AWS nodes + ${stations.length - nStations} regions | equirectangular`;
   $("scaleUnit").textContent = unit;
   $("scaleLow").textContent = fmt(lo, 0);
   $("scaleMid").textContent = fmt((lo + hi) / 2, 0);
@@ -763,9 +789,19 @@ async function init() {
   const { stations } = await api("/api/stations");
   state.stations = stations;
 
-  $("stationSelect").innerHTML = stations
-    .map((s) => `<option value="${s.location}">${s.station} - ${s.state} (${s.terrain_type})</option>`)
-    .join("");
+  // grouped: the dataset's own AWS stations, then every state / UT
+  const group = (label, rows, describe) => rows.length
+    ? `<optgroup label="${label}">` + rows.map((s) =>
+        `<option value="${s.location}">${describe(s)}</option>`).join("") + "</optgroup>"
+    : "";
+
+  $("stationSelect").innerHTML =
+    group("AWS stations - Climate_final_k dataset",
+          stations.filter((s) => s.source === "climate-final-k"),
+          (s) => `${s.station} - ${s.zone} (${s.terrain_type})`) +
+    group("States & union territories - live archive",
+          stations.filter((s) => s.source === "open-meteo-archive"),
+          (s) => `${s.station} - ${s.zone} (${s.kind})`);
 
   await selectStation(stations[0].location);
   renderStationMap();
@@ -786,6 +822,18 @@ function wireEvents() {
     });
     scheduleRefresh();
     refreshLive();
+  });
+
+  $("mapScope").addEventListener("click", (e) => {
+    const btn = e.target.closest(".scope-pill");
+    if (!btn) return;
+    state.scope = btn.dataset.scope;
+    document.querySelectorAll(".scope-pill").forEach((b) => {
+      b.className = b === btn
+        ? "scope-pill px-2.5 py-1 rounded-lg bg-slate-700/50 text-slate-200 border border-slate-600/50"
+        : "scope-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors";
+    });
+    renderStationMap();
   });
 
   $("mapLayers").addEventListener("click", (e) => {
@@ -841,13 +889,13 @@ function wireEvents() {
           `(departure ${live.departure_tmax_c} C)\nRecord Tmax in this window: ${live.normals.record_tmax} C`);
   });
 
-  $("sideNav").addEventListener("click", (e) => {
+  $("topNav").addEventListener("click", (e) => {
     const btn = e.target.closest(".nav-btn");
     if (!btn) return;
     document.querySelectorAll(".nav-btn").forEach((b) => {
       b.className = b === btn
-        ? "nav-btn relative group p-3 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 glow-cyan-box transition-all"
-        : "nav-btn relative group p-3 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 transition-all";
+        ? "nav-btn px-3.5 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 whitespace-nowrap transition-all"
+        : "nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all";
     });
     $(btn.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
   });

@@ -28,6 +28,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # The state/UT archive is expensive to fetch and never changes for a
+      # fixed date range, so keep it between runs.
+      - name: Cache region archives
+        uses: actions/cache@v4
+        with:
+          path: data/cache/regions
+          key: regions-${{ hashFiles('backend/regions.py') }}
+
       - name: Check the page's CDN references resolve
         run: python scripts/check_assets.py
 

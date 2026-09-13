@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 
 import analysis  # noqa: E402
+import regions  # noqa: E402
 
 STAT_COLUMNS = ["tmax_c", "tmin_c", "mean_temp_c", "rh_mean_pct",
                 "wind_speed_kmph", "pressure_hpa", "diurnal_temp_range_c",
@@ -67,9 +68,14 @@ def main() -> None:
     (out / ".nojekyll").write_text("", encoding="utf-8")
 
     # ---- dataset-wide results -------------------------------------------
-    stations = analysis.station_catalogue()
+    # Warm the region archive first: every state / UT is fetched once and
+    # cached on disk, so the analysis loop below never waits on the network.
+    print("Fetching region archives (cached after the first run)...", flush=True)
+    regions.prefetch()
+
+    stations = analysis.station_catalogue() + regions.region_catalogue()
     for s in stations:
-        s["id"] = slug(s["station"])
+        s.setdefault("id", slug(s["station"]))
 
     total = 0
     total += write(data / "stations.json", {"stations": stations})

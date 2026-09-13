@@ -14,11 +14,14 @@ Dataset: Climate_final_k.csv  (India daily AWS climate records)
 from __future__ import annotations
 
 import math
+import re
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+import regions
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "Climate_final_k.csv"
 
@@ -169,6 +172,9 @@ def station_catalogue() -> list:
     for _, r in grouped.iterrows():
         out.append({
             "location": r["location"],
+            "id": re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", r["station"].lower())).strip("-"),
+            "source": "climate-final-k",
+            "kind": "AWS station",
             "station": r["station"],
             "state": r["state"],
             "zone": r["zone"],
@@ -189,12 +195,40 @@ def station_catalogue() -> list:
 
 
 def _subset(location):
+    """
+    Rows for one location.
+
+    A dataset station resolves to its slice of Climate_final_k.csv; a
+    "region:<id>" key resolves to that state/UT's archive frame, which
+    regions.py builds in the same schema.  Everything downstream is identical
+    either way, so the experiment code never branches on the source.
+    """
+    if regions.is_region(location):
+        return regions.region_frame(str(location).split(":", 1)[1])
+
     df = load_data()
     if location and location != "ALL":
         sub = df[df["location"] == location]
         if len(sub):
             return sub
     return df
+
+
+def data_source(location) -> dict:
+    """Provenance for the selected location, surfaced in the UI."""
+    if regions.is_region(location):
+        return {
+            "source": "open-meteo-archive",
+            "label": "Open-Meteo reanalysis 2019-2024",
+            "detail": "Daily history for the state/UT reference point, reshaped "
+                      "into the dataset schema; heatwave flags applied with the "
+                      "IMD rule (departure >= 4.5 C on a day already hot for the terrain).",
+        }
+    return {
+        "source": "climate-final-k",
+        "label": "Climate_final_k.csv archive",
+        "detail": "IMD-style AWS records shipped with the project, 2019-2024.",
+    }
 
 
 # ---------------------------------------------------------------- Exp 3
