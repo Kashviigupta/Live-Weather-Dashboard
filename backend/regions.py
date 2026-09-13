@@ -251,20 +251,38 @@ def _build_frame(region_id: str) -> pd.DataFrame:
     return df
 
 
+def cache_path(region_id: str) -> Path:
+    """Where a region's archive lives: a gzipped CSV committed with the repo."""
+    return CACHE_DIR / f"{region_id}.csv.gz"
+
+
 def region_frame(region_id: str, refresh: bool = False) -> pd.DataFrame:
-    """Region history in the dataset's schema, memoised in RAM and on disk."""
+    """
+    Region history in the dataset's schema.
+
+    The archives are committed to the repo (2.7 MB gzipped for all 36), so a
+    build never depends on the reanalysis API being reachable or un-throttled -
+    an earlier CI run lost seven states to rate limiting.  Pass refresh=True,
+    or delete the file, to pull a fresh copy.
+    """
     if not refresh and region_id in _frames:
         return _frames[region_id]
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache_file = CACHE_DIR / f"{region_id}.csv"
+    cache_file = cache_path(region_id)
+    legacy_file = CACHE_DIR / f"{region_id}.csv"      # pre-compression layout
 
     if cache_file.exists() and not refresh:
         df = pd.read_csv(cache_file)
         df["date_parsed"] = pd.to_datetime(df["date_parsed"])
+    elif legacy_file.exists() and not refresh:
+        df = pd.read_csv(legacy_file)
+        df["date_parsed"] = pd.to_datetime(df["date_parsed"])
+        df.to_csv(cache_file, index=False, compression={"method": "gzip", "mtime": 0})
     else:
         df = _build_frame(region_id)
-        df.to_csv(cache_file, index=False)
+        # mtime pinned so an unchanged archive produces an identical file
+        df.to_csv(cache_file, index=False, compression={"method": "gzip", "mtime": 0})
 
     df["month_name"] = pd.Categorical(df["month_name"], categories=MONTH_ORDER, ordered=True)
     df["season"] = pd.Categorical(
@@ -279,8 +297,7 @@ def region_catalogue(only_cached: bool = False) -> list:
     """Region records shaped exactly like analysis.station_catalogue() rows."""
     out = []
     for rid, name, zone, lat, lon, kind in REGIONS:
-        cache_file = CACHE_DIR / f"{rid}.csv"
-        if only_cached and not cache_file.exists():
+        if only_cached and not cache_path(rid).exists():
             continue
         try:
             df = region_frame(rid)

@@ -70,10 +70,20 @@ def main() -> None:
     # ---- dataset-wide results -------------------------------------------
     # Warm the region archive first: every state / UT is fetched once and
     # cached on disk, so the analysis loop below never waits on the network.
-    print("Fetching region archives (cached after the first run)...", flush=True)
+    print("Loading region archives (committed to the repo; fetched only if absent)...", flush=True)
     regions.prefetch()
 
-    stations = analysis.station_catalogue() + regions.region_catalogue()
+    region_rows = regions.region_catalogue()
+    missing = {r[0] for r in regions.REGIONS} - {r["id"] for r in region_rows}
+    if missing:
+        # Better to fail loudly than to publish a site quietly missing states,
+        # which is what happened when CI got rate limited mid-fetch.
+        raise SystemExit(
+            f"aborting: {len(missing)} region archive(s) unavailable -> {sorted(missing)}\n"
+            "re-run once the archives are readable, or restore them from the repo."
+        )
+
+    stations = analysis.station_catalogue() + region_rows
     for s in stations:
         s.setdefault("id", slug(s["station"]))
 
