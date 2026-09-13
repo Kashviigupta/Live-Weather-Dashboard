@@ -14,6 +14,8 @@ const state = {
   range: "live",
   layer: "temp",
   scope: "all",
+  activeSection: null,
+  navLockedUntil: 0,
   distColumn: "tmax_c",
   heatMetric: "tmax_c",
   timer: null,
@@ -132,8 +134,9 @@ function renderLive(data) {
 
   const isRegion = st.source === "open-meteo-archive";
   $("stationTitle").classList.remove("skeleton");
-  $("stationTitle").textContent = isRegion
-    ? `${st.station} (${st.kind})`
+  $("stationTitle").textContent =
+    st.kind === "City" ? `${st.station}, ${st.state}`
+    : isRegion ? `${st.station} (${st.kind})`
     : `Station ${st.station} - ${st.state}`;
   $("stationCoords").textContent =
     `Lat: ${st.latitude.toFixed(4)} | Lon: ${st.longitude.toFixed(4)} | Alt: ${st.elevation_m} m ASL | ${st.terrain_type} / ${st.zone}`;
@@ -324,11 +327,17 @@ function renderStationMap() {
   const all = state.stations;
   if (!all.length) return;
 
-  // the scope pills filter which source is plotted; the selected location is
-  // always drawn so it never disappears from under the user
+  // the scope pills filter what is plotted (204 places at once is a mess); the
+  // selected location is always drawn so it never disappears from under the user
+  const inScope = (s) => {
+    if (state.scope === "all") return true;
+    if (state.scope === "station") return s.source === "climate-final-k";
+    if (state.scope === "state") return s.kind === "State" || s.kind === "UT";
+    if (state.scope === "city") return s.kind === "City";
+    return true;
+  };
   const stations = all.filter((s) =>
-    state.scope === "all" || s.source === state.scope ||
-    (state.station && s.location === state.station.location));
+    inScope(s) || (state.station && s.location === state.station.location));
   if (!stations.length) return;
 
   const lats = stations.map((s) => s.latitude), lons = stations.map((s) => s.longitude);
@@ -351,12 +360,14 @@ function renderStationMap() {
     const v = metricOf(s);
     const color = tempColor(v, lo, hi);
     const active = state.station && s.location === state.station.location;
-    const isRegion = s.source === "open-meteo-archive";
-    const size = active ? 16 : 11;
-    // regions are drawn as diamonds so the two sources stay distinguishable
+    const isCity = s.kind === "City";
+    const isRegion = s.source === "open-meteo-archive" && !isCity;
+    // circles for AWS stations, diamonds for states/UTs, small squares for
+    // cities, so the three layers stay readable when plotted together
+    const size = active ? 16 : isCity ? 8 : 11;
     const shape = isRegion
       ? `clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); border-radius:0;`
-      : `border-radius:9999px;`;
+      : isCity ? `border-radius:2px;` : `border-radius:9999px;`;
     return `<div class="absolute flex flex-col items-center group cursor-pointer" style="left:${x.toFixed(2)}%; top:${y.toFixed(2)}%; transform: translate(-50%,-50%); z-index:${active ? 20 : 10};"
                  data-location="${s.location.replace(/"/g, "&quot;")}">
       ${active ? `<span class="absolute animate-ping" style="width:${size}px;height:${size}px;background:${color};opacity:.7;${shape}"></span>` : ""}
@@ -704,6 +715,125 @@ function renderTaxonomy(schema) {
       <td class="${badge(a.measurement)}">${a.measurement}</td></tr>`).join("")}</tbody>`;
 }
 
+/* ------------------------------------------------------ location grouping */
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+/**
+ * The selector is grouped one <optgroup> per state: the state's own reference
+ * point first, then its main cities.  Dataset AWS stations keep their own
+ * group at the top.
+ */
+function buildLocationOptions(stations) {
+  const opt = (s, label) => `<option value="${esc(s.location)}">${esc(label)}</option>`;
+
+  const aws = stations.filter((s) => s.source === "climate-final-k");
+  const archive = stations.filter((s) => s.source === "open-meteo-archive");
+
+  let html = "";
+  if (aws.length) {
+    html += `<optgroup label="AWS stations — Climate_final_k dataset (${aws.length})">` +
+      aws.map((s) => opt(s, `${s.station} — ${s.zone} (${s.terrain_type})`)).join("") +
+      "</optgroup>";
+  }
+
+  // bucket every archive location under its parent state
+  const byState = new Map();
+  for (const s of archive) {
+    const key = s.state_id || s.id;
+    if (!byState.has(key)) byState.set(key, { state: null, cities: [] });
+    if (s.kind === "State" || s.kind === "UT") byState.get(key).state = s;
+    else byState.get(key).cities.push(s);
+  }
+
+  const ordered = [...byState.entries()].sort((a, b) => {
+    const an = a[1].state ? a[1].state.station : a[0];
+    const bn = b[1].state ? b[1].state.station : b[0];
+    return an.localeCompare(bn);
+  });
+
+  for (const [, { state, cities }] of ordered) {
+    if (!state && !cities.length) continue;
+    const name = state ? state.station : cities[0].state;
+    const kind = state ? state.kind : "State";
+    html += `<optgroup label="${esc(name)} — ${esc(kind)} (${cities.length} cities)">`;
+    if (state) html += opt(state, `${state.station} — statewide reference`);
+    html += cities
+      .sort((a, b) => a.station.localeCompare(b.station))
+      .map((c) => opt(c, `   ${c.station} — ${c.terrain_type.toLowerCase()}, ${c.elevation_m} m`))
+      .join("");
+    html += "</optgroup>";
+  }
+  return html;
+}
+
+/* ------------------------------------------------------------- scrollspy */
+const NAV_ACTIVE =
+  "nav-btn px-3.5 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 whitespace-nowrap transition-all";
+const NAV_IDLE =
+  "nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all";
+
+function setActiveNav(targetId) {
+  if (state.activeSection === targetId) return;
+  state.activeSection = targetId;
+
+  let active = null;
+  document.querySelectorAll(".nav-btn").forEach((b) => {
+    const on = b.dataset.target === targetId;
+    b.className = on ? NAV_ACTIVE : NAV_IDLE;
+    if (on) active = b;
+  });
+
+  // keep the highlighted tab in view when the bar scrolls horizontally
+  if (active && active.scrollIntoView) {
+    active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }
+}
+
+/**
+ * Highlight the tab for whichever section the reader is currently in.
+ * Uses scroll position rather than intersection ratios so that tall sections
+ * (the map, the time series) hold the highlight for their whole height.
+ */
+function startScrollSpy() {
+  const sections = [...document.querySelectorAll(".nav-btn")]
+    .map((b) => ({ id: b.dataset.target, el: $(b.dataset.target) }))
+    .filter((s) => s.el);
+  if (!sections.length) return;
+
+  const header = document.querySelector("header");
+  let ticking = false;
+
+  const update = () => {
+    ticking = false;
+    if (Date.now() < (state.navLockedUntil || 0)) return;
+
+    const offset = (header ? header.offsetHeight : 0) + 24;
+    const atBottom =
+      window.innerHeight + window.scrollY >= document.body.scrollHeight - 4;
+    if (atBottom) {                       // the last section may be short
+      setActiveNav(sections[sections.length - 1].id);
+      return;
+    }
+
+    let current = sections[0].id;
+    for (const s of sections) {
+      if (s.el.getBoundingClientRect().top - offset <= 0) current = s.id;
+      else break;
+    }
+    setActiveNav(current);
+  };
+
+  const onScroll = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(update);
+  };
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll, { passive: true });
+  update();
+}
+
 /* --------------------------------------------------------------- loading */
 async function loadStatic() {
   const [quality, schema] = await Promise.all([api("/api/quality"), api("/api/schema")]);
@@ -789,19 +919,7 @@ async function init() {
   const { stations } = await api("/api/stations");
   state.stations = stations;
 
-  // grouped: the dataset's own AWS stations, then every state / UT
-  const group = (label, rows, describe) => rows.length
-    ? `<optgroup label="${label}">` + rows.map((s) =>
-        `<option value="${s.location}">${describe(s)}</option>`).join("") + "</optgroup>"
-    : "";
-
-  $("stationSelect").innerHTML =
-    group("AWS stations - Climate_final_k dataset",
-          stations.filter((s) => s.source === "climate-final-k"),
-          (s) => `${s.station} - ${s.zone} (${s.terrain_type})`) +
-    group("States & union territories - live archive",
-          stations.filter((s) => s.source === "open-meteo-archive"),
-          (s) => `${s.station} - ${s.zone} (${s.kind})`);
+  $("stationSelect").innerHTML = buildLocationOptions(stations);
 
   await selectStation(stations[0].location);
   renderStationMap();
@@ -892,13 +1010,14 @@ function wireEvents() {
   $("topNav").addEventListener("click", (e) => {
     const btn = e.target.closest(".nav-btn");
     if (!btn) return;
-    document.querySelectorAll(".nav-btn").forEach((b) => {
-      b.className = b === btn
-        ? "nav-btn px-3.5 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 whitespace-nowrap transition-all"
-        : "nav-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 border border-transparent whitespace-nowrap transition-all";
-    });
+    // hold the highlight on the clicked tab until the smooth scroll settles,
+    // otherwise the observer would flash through every section on the way
+    state.navLockedUntil = Date.now() + 900;
+    setActiveNav(btn.dataset.target);
     $(btn.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+
+  startScrollSpy();
 }
 
 init().catch((err) => {

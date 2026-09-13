@@ -132,11 +132,27 @@ live temperature minus the station's `normal_tmax_c` for this calendar window
 
 ## Locations
 
-The selector carries **66 locations in two groups**:
+The selector carries **234 locations**, grouped one `<optgroup>` per state —
+the state's own reference point first, then its main cities:
 
-- **30 AWS stations** — your `Climate_final_k.csv` archive.
-- **36 states and union territories** — every Indian state/UT, at its capital's
-  coordinates.
+- **30 AWS stations** — your `Climate_final_k.csv` archive (their own group).
+- **36 states and union territories** — every Indian state/UT, at its capital.
+- **168 cities** — the main cities of each state (Maharashtra: Mumbai, Pune,
+  Nagpur, Nashik, Navi Mumbai, Chhatrapati Sambhajinagar, Solapur, Kolhapur;
+  Uttar Pradesh: Lucknow, Kanpur, Varanasi, Agra, Prayagraj, Ghaziabad, Noida,
+  Meerut, Bareilly; and so on).
+
+Every one of them gets the complete dashboard — live conditions, time series,
+forecast, distribution, correlation, regression, heatmap and aggregation.
+
+City coordinates are not hand-typed. [backend/cities.py](backend/cities.py)
+resolves each name through the Open-Meteo geocoding API once and pins the
+result in `data/cache/cities.json`, checking the returned `admin1` against the
+state the city is listed under. That check earned its keep: Panaji resolved
+into Gujarat and Dharamshala into Uttar Pradesh, and four names returned no
+Indian match — all six are now pinned by hand in `MANUAL_COORDS` with verified
+coordinates. Terrain is derived per place, so Pune reads as plains while
+Mumbai, in the same state, reads as coastal.
 
 States have no rows in the CSV, so [backend/regions.py](backend/regions.py)
 pulls their real 2019–2024 daily history from the Open-Meteo reanalysis and
@@ -149,9 +165,16 @@ heatwave / alert fields derived from those normals with the IMD rule
 
 Because the frame matches, `analysis.py` runs unchanged — regression,
 correlation, distribution, aggregation, heatmap and the harmonic forecast are
-computed by the same Exp 1–5 code for both sources. A badge in the header
+computed by the same Exp 1–5 code for every source. A badge in the header
 always says which archive is behind the numbers on screen, and the geospatial
-grid draws stations as circles and states as diamonds, with a scope filter.
+grid draws AWS stations as circles, states as diamonds and cities as squares,
+with an All / Stations / States / Cities filter so 204 archive points stay
+readable.
+
+The top taskbar tracks scroll position: as you move down the page the active
+tab advances section by section, and the bar scrolls horizontally to keep the
+current tab visible. Clicking a tab holds its highlight until the smooth scroll
+settles, so it does not flicker through the sections on the way.
 
 One useful side effect: for states, the normals and the live feed come from the
 same provider, so departures are internally consistent and severity reads

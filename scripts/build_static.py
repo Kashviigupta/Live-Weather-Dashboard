@@ -70,18 +70,27 @@ def main() -> None:
     # ---- dataset-wide results -------------------------------------------
     # Warm the region archive first: every state / UT is fetched once and
     # cached on disk, so the analysis loop below never waits on the network.
-    print("Loading region archives (committed to the repo; fetched only if absent)...", flush=True)
-    regions.prefetch()
+    print("Loading archives from the repo (nothing is fetched at build time)...", flush=True)
+    region_rows = regions.region_catalogue(only_cached=True)
+    have = {r["id"] for r in region_rows}
 
-    region_rows = regions.region_catalogue()
-    missing = {r[0] for r in regions.REGIONS} - {r["id"] for r in region_rows}
-    if missing:
-        # Better to fail loudly than to publish a site quietly missing states,
-        # which is what happened when CI got rate limited mid-fetch.
+    # Every state and UT must be present - publishing a site quietly missing
+    # states is what went wrong when CI was rate limited mid-fetch.
+    missing_states = {r[0] for r in regions.REGIONS} - have
+    if missing_states:
         raise SystemExit(
-            f"aborting: {len(missing)} region archive(s) unavailable -> {sorted(missing)}\n"
-            "re-run once the archives are readable, or restore them from the repo."
+            f"aborting: {len(missing_states)} state/UT archive(s) missing -> "
+            f"{sorted(missing_states)}\nrestore them from the repo, or re-run the prefetch."
         )
+
+    # Cities, by contrast, backfill over time: build with whatever has landed
+    # and say plainly how many are still outstanding.
+    import cities as cities_mod
+    all_cities = set(cities_mod.catalogue())
+    missing_cities = sorted(all_cities - have)
+    print(f"  states/UTs: {len(regions.REGIONS)}/{len(regions.REGIONS)}")
+    print(f"  cities:     {len(all_cities) - len(missing_cities)}/{len(all_cities)}"
+          + (f"  (pending: {len(missing_cities)})" if missing_cities else ""))
 
     stations = analysis.station_catalogue() + region_rows
     for s in stations:

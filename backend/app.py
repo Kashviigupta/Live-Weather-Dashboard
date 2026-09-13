@@ -40,15 +40,26 @@ app.add_middleware(
 
 
 def _catalogue() -> list:
-    """Every selectable location: the 30 AWS stations plus every state / UT."""
-    return analysis.station_catalogue() + regions.region_catalogue()
+    """
+    Every selectable location: the 30 AWS stations, every state / UT, and the
+    cities whose archive is on disk.
+
+    only_cached keeps this honest and fast - an uncached city is simply not
+    offered, rather than making a request thread wait on a throttled archive
+    fetch.  Cities backfill as their archives land.
+    """
+    return analysis.station_catalogue() + regions.region_catalogue(only_cached=True)
 
 
 def _station(location: str):
     """Resolve a location string to a station or region record."""
     if regions.is_region(location):
         region_id = location.split(":", 1)[1]
-        for r in regions.region_catalogue():
+        if regions.place(region_id) and not regions.cache_path(region_id).exists():
+            raise HTTPException(
+                status_code=503,
+                detail=f"Archive for '{region_id}' has not been fetched yet.")
+        for r in regions.region_catalogue(only_cached=True):
             if r["id"] == region_id:
                 return r
         raise HTTPException(status_code=404, detail=f"Unknown region: {region_id}")

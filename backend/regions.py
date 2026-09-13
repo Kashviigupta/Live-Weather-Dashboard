@@ -122,7 +122,12 @@ def _band(value: float, bands) -> str:
 #: Six years of daily data is a costly request, and the free tier throttles by
 #: weighted units rather than plain call count - so space the calls out and back
 #: off when the API says 429.
-MIN_SECONDS_BETWEEN_CALLS = 12.0
+#: Six years x nine daily variables is a heavy request, and the free tier meters
+#: by weighted units per hour - fetching ~200 places back to back exhausts the
+#: window and every later call 429s, whatever its size.  30s between calls keeps
+#: a long prefetch inside the quota; the archives are committed afterwards, so
+#: this cost is paid once and never in CI.
+MIN_SECONDS_BETWEEN_CALLS = 30.0
 MAX_ATTEMPTS = 6
 _last_call_at = 0.0
 
@@ -153,7 +158,17 @@ def _fetch_archive(lat: float, lon: float) -> dict:
     delay = 20.0
     for attempt in range(1, MAX_ATTEMPTS + 1):
         _throttle()
-        res = requests.get(ARCHIVE_URL, params=params, timeout=180)
+        try:
+            res = requests.get(ARCHIVE_URL, params=params, timeout=180)
+        except requests.RequestException as exc:
+            # dropped connections and read timeouts are as transient as a 429
+            if attempt == MAX_ATTEMPTS:
+                raise
+            print(f"      network error ({type(exc).__name__}), retrying in {delay:.0f}s "
+                  f"(attempt {attempt}/{MAX_ATTEMPTS})", flush=True)
+            time.sleep(delay)
+            delay = min(delay * 2, 180)
+            continue
 
         if res.status_code == 429:
             if attempt == MAX_ATTEMPTS:
@@ -172,8 +187,46 @@ def _fetch_archive(lat: float, lon: float) -> dict:
     raise RuntimeError("archive fetch exhausted its retries")
 
 
+def place(place_id: str) -> dict | None:
+    """
+    Resolve a place id to its descriptor.
+
+    States and UTs come from REGIONS; city ids ("maharashtra-pune") come from
+    the pinned geocode cache.  Both shapes carry the same keys, so everything
+    downstream treats them identically.
+    """
+    if place_id in REGION_BY_ID:
+        rid, name, zone, lat, lon, kind = REGION_BY_ID[place_id]
+        return {"id": rid, "name": name, "state_id": rid, "state_name": name,
+                "zone": zone, "latitude": lat, "longitude": lon, "kind": kind}
+
+    import cities
+    record = cities.get(place_id)
+    if record:
+        return {**record, "kind": "City"}
+    return None
+
+
+def _terrain_for(place_id: str, state_id: str, elevation: float) -> str:
+    """
+    Hills win on elevation; otherwise a place counts as coastal only if it is
+    in a coastal state *and* close to sea level - Pune sits in Maharashtra but
+    is neither coastal nor hilly.
+    """
+    if elevation >= 600:
+        return "HILLY"
+    if state_id in COASTAL_REGIONS and elevation < 60:
+        return "COASTAL"
+    return "PLAINS"
+
+
 def _build_frame(region_id: str) -> pd.DataFrame:
-    rid, name, zone, lat, lon, kind = REGION_BY_ID[region_id]
+    spec = place(region_id)
+    if spec is None:
+        raise KeyError(f"unknown place: {region_id}")
+    name, zone, lat, lon, kind = (spec["name"], spec["zone"], spec["latitude"],
+                                  spec["longitude"], spec["kind"])
+    rid, state_id, state_name = spec["id"], spec["state_id"], spec["state_name"]
     payload = _fetch_archive(lat, lon)
     daily = payload["daily"]
     elevation = float(payload.get("elevation") or 0)
@@ -198,8 +251,7 @@ def _build_frame(region_id: str) -> pd.DataFrame:
         if df[col].isna().any():
             df[col] = df[col].fillna(df[col].mean())
 
-    terrain = ("HILLY" if elevation >= 600
-               else "COASTAL" if rid in COASTAL_REGIONS else "PLAINS")
+    terrain = _terrain_for(rid, state_id, elevation)
 
     df["date"] = df["date_parsed"].dt.strftime("%d-%m-%Y")
     df["year"] = df["date_parsed"].dt.year
@@ -209,9 +261,10 @@ def _build_frame(region_id: str) -> pd.DataFrame:
     df["day_of_year"] = df["date_parsed"].dt.dayofyear
     df["season"] = df["month"].map(SEASON_BY_MONTH)
 
-    df["location"] = f"{name}, {kind}, India"
+    df["location"] = (f"{name}, {kind}, India" if kind != "City"
+                      else f"{name}, {state_name}, India")
     df["station"] = name
-    df["state"] = name
+    df["state"] = state_name
     df["zone"] = zone
     df["terrain_type"] = terrain
     df["latitude"] = lat
@@ -293,27 +346,42 @@ def region_frame(region_id: str, refresh: bool = False) -> pd.DataFrame:
     return df
 
 
+def all_place_ids() -> list:
+    """Every archive-backed place: the states/UTs first, then their cities."""
+    import cities
+    ids = [r[0] for r in REGIONS]
+    ids += sorted(cities.catalogue().keys())
+    return ids
+
+
 def region_catalogue(only_cached: bool = False) -> list:
-    """Region records shaped exactly like analysis.station_catalogue() rows."""
+    """
+    Records for every archive-backed place, shaped exactly like the rows
+    analysis.station_catalogue() returns, so the two sources concatenate.
+    """
     out = []
-    for rid, name, zone, lat, lon, kind in REGIONS:
-        if only_cached and not cache_path(rid).exists():
+    for pid in all_place_ids():
+        spec = place(pid)
+        if spec is None:
+            continue
+        if only_cached and not cache_path(pid).exists():
             continue
         try:
-            df = region_frame(rid)
+            df = region_frame(pid)
         except Exception:
             continue
         out.append({
-            "location": location_key(rid),
-            "id": rid,
-            "station": name,
-            "state": name,
-            "zone": zone,
+            "location": location_key(pid),
+            "id": pid,
+            "station": spec["name"],
+            "state": spec["state_name"],
+            "state_id": spec["state_id"],
+            "zone": spec["zone"],
             "terrain_type": df["terrain_type"].iloc[0],
-            "kind": kind,
+            "kind": spec["kind"],
             "source": "open-meteo-archive",
-            "latitude": lat,
-            "longitude": lon,
+            "latitude": spec["latitude"],
+            "longitude": spec["longitude"],
             "elevation_m": int(df["elevation_m"].iloc[0]),
             "avg_tmax": round(float(df["tmax_c"].mean()), 1),
             "avg_tmin": round(float(df["tmin_c"].mean()), 1),
@@ -327,12 +395,21 @@ def region_catalogue(only_cached: bool = False) -> list:
     return sorted(out, key=lambda d: d["station"])
 
 
-def prefetch(verbose: bool = True) -> None:
-    """Warm the disk cache for every region (used by the static build)."""
-    for i, (rid, name, *_rest) in enumerate(REGIONS, 1):
+def prefetch(verbose: bool = True) -> list:
+    """
+    Warm the disk cache for every state, UT and city (used by the static
+    build).  Returns the ids that could not be loaded.
+    """
+    ids = all_place_ids()
+    failed = []
+    for i, pid in enumerate(ids, 1):
+        spec = place(pid)
+        label = spec["name"] if spec else pid
         try:
-            df = region_frame(rid)
+            df = region_frame(pid)
             if verbose:
-                print(f"  [{i:2d}/{len(REGIONS)}] {name}: {len(df)} days", flush=True)
+                print(f"  [{i:3d}/{len(ids)}] {label}: {len(df)} days", flush=True)
         except Exception as exc:
-            print(f"  [{i:2d}/{len(REGIONS)}] {name}: FAILED - {exc}", flush=True)
+            failed.append(pid)
+            print(f"  [{i:3d}/{len(ids)}] {label}: FAILED - {exc}", flush=True)
+    return failed
