@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Aethercast Intelligence &amp; Atmospheric Data Lab</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          space: { 950: '#070a13', 900: '#0c1222', 850: '#111a30', 800: '#172340', 700: '#1f3056', 600: '#2b4274' },
+          cyanGlow: '#00f2fe', electric: '#3b82f6', amberGlow: '#f59e0b',
+          emeraldGlow: '#10b981', violetGlow: '#8b5cf6'
+        },
+        fontFamily: {
+          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+        }
+      }
+    }
+  }
+</script>
+<style>
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0c1222; }
+  ::-webkit-scrollbar-thumb { background: #1f3056; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+
+  .glass-panel {
+    background: rgba(17, 26, 48, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  }
+  .glass-panel-subtle {
+    background: rgba(12, 18, 34, 0.65);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .glow-cyan-box { box-shadow: 0 0 20px -3px rgba(0, 242, 254, 0.25); }
+  .glow-blue-box { box-shadow: 0 0 20px -3px rgba(59, 130, 246, 0.25); }
+  .dot-grid-bg {
+    background-image: radial-gradient(rgba(59, 130, 246, 0.15) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .radar-sweep { transform-origin: center center; animation: sweep 4s linear infinite; }
+  @keyframes sweep { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  .pulse-indicator { animation: pulseGlow 2s infinite ease-in-out; }
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+  .skeleton { color: transparent; background: linear-gradient(90deg,#172340,#1f3056,#172340);
+              background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .station-dot { transition: transform .15s ease; }
+  .station-dot:hover { transform: scale(1.6); }
+</style>
+</head>
+<body class="bg-space-950 text-slate-200 min-h-screen flex overflow-x-hidden font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+
+<!-- ===================== Left Mini Navigation Sidebar ===================== -->
+<aside class="w-16 md:w-20 bg-space-900/90 border-r border-slate-800/80 flex flex-col items-center py-5 justify-between shrink-0 z-40 sticky top-0 h-screen backdrop-blur-md">
+  <div class="flex flex-col items-center gap-6">
+    <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-electric via-cyanGlow to-indigo-500 p-0.5 shadow-lg shadow-cyan-500/20 flex items-center justify-center cursor-pointer group">
+      <div class="w-full h-full bg-space-950 rounded-[14px] flex items-center justify-center transition-all group-hover:bg-transparent">
+        <svg class="w-6 h-6 text-cyan-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+    </div>
+
+    <nav class="flex flex-col items-center gap-2 mt-4" id="sideNav">
+      <button data-target="sec-telemetry" class="nav-btn relative group p-3 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 glow-cyan-box transition-all" title="Atmospheric Overview">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="absolute left-full ml-3 px-2 py-1 bg-space-800 text-xs font-mono rounded text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-slate-700 z-50">Telemetry Desk</span>
+      </button>
+
+      <button data-target="sec-geo" class="nav-btn relative group p-3 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 transition-all" title="Geospatial Station Grid">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" stroke-dasharray="2 2"></circle>
+          <path d="M12 3v9l6 3" stroke-linecap="round" stroke-linejoin="round"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <span class="absolute left-full ml-3 px-2 py-1 bg-space-800 text-xs font-mono rounded text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-slate-700 z-50">Geospatial Grid</span>
+      </button>
+
+      <button data-target="sec-series" class="nav-btn relative group p-3 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 transition-all" title="Time Series &amp; Forecast">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="absolute left-full ml-3 px-2 py-1 bg-space-800 text-xs font-mono rounded text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-slate-700 z-50">Predictive Linears</span>
+      </button>
+
+      <button data-target="sec-matrix" class="nav-btn relative group p-3 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 transition-all" title="Matrices &amp; Distribution">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="absolute left-full ml-3 px-2 py-1 bg-space-800 text-xs font-mono rounded text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-slate-700 z-50">Gaussian Stats</span>
+      </button>
+
+      <button data-target="sec-regression" class="nav-btn relative group p-3 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 transition-all" title="Regression Lab">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M4 20L20 4M6 18a1 1 0 100-2 1 1 0 000 2zm5-3a1 1 0 100-2 1 1 0 000 2zm5-4a1 1 0 100-2 1 1 0 000 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="absolute left-full ml-3 px-2 py-1 bg-space-800 text-xs font-mono rounded text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-slate-700 z-50">Regression Lab</span>
+      </button>
+
+      <button data-target="sec-pipeline" class="nav-btn relative group p-3 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-space-800/60 transition-all" title="Data Quality Pipeline">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="absolute left-full ml-3 px-2 py-1 bg-space-800 text-xs font-mono rounded text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-slate-700 z-50">Pipeline Health</span>
+      </button>
+    </nav>
+  </div>
+
+  <div class="flex flex-col items-center gap-3">
+    <button class="relative p-2.5 rounded-xl text-amber-400 hover:bg-amber-400/10 transition-colors" title="Heatwave Alerts" id="alertBell">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+      <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400"></span>
+    </button>
+    <button class="p-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-space-800/60 transition-colors" title="Refresh Now" id="refreshBtn">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+    <div class="p-2.5 border-t border-slate-800 w-full flex justify-center">
+      <div id="syncBadge" class="w-8 h-8 rounded-full bg-slate-800 border border-emerald-500/40 flex items-center justify-center text-xs text-emerald-400 font-mono" title="Sync Status">OK</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============================ Main Container ============================ -->
+<main class="flex-1 flex flex-col min-w-0 bg-space-950 pb-12">
+
+  <!-- ----------------------- Header Telemetry Strip ----------------------- -->
+  <header class="border-b border-slate-800/80 bg-space-900/60 sticky top-0 z-30 backdrop-blur-xl px-4 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3.5">
+      <div class="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-cyan-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-semibold tracking-wide text-white uppercase flex items-center gap-2">
+            <span id="stationTitle" class="skeleton">Station loading</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-mono lowercase">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-indicator"></span>
+              <span id="streamState">active stream</span>
+            </span>
+          </h1>
+        </div>
+        <p class="text-xs text-slate-400 font-mono" id="stationCoords">Lat: -- | Lon: -- | Alt: --</p>
+      </div>
+    </div>
+
+    <div class="flex items-center flex-wrap gap-3">
+      <div class="relative min-w-[260px]">
+        <select id="stationSelect" class="w-full bg-space-850/80 border border-slate-700/70 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/70 focus:ring-1 focus:ring-cyan-500/40 transition-all font-mono appearance-none">
+          <option>Loading stations...</option>
+        </select>
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+
+      <div class="flex items-center bg-space-850 p-1 rounded-xl border border-slate-800 text-xs" id="rangePills">
+        <button data-range="live" class="range-pill px-3 py-1 rounded-lg bg-blue-600/30 text-cyan-300 font-medium border border-cyan-500/30">Live (60s)</button>
+        <button data-range="hourly" class="range-pill px-3 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Hourly</button>
+        <button data-range="daily" class="range-pill px-3 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Daily</button>
+      </div>
+
+      <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-space-850 border border-slate-800 text-xs font-mono">
+        <div class="flex items-center gap-1.5 text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span class="font-semibold text-slate-200" id="pingValue">--</span> ping
+        </div>
+        <span class="text-slate-600">|</span>
+        <span class="text-cyan-400"><span id="completeness">--</span> complete</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================= Dashboard Content ========================= -->
+  <div class="p-4 lg:p-8 space-y-6 max-w-[1720px] mx-auto w-full">
+
+    <!-- ===== SECTION 1: Live telemetry + geospatial station grid ===== -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6" id="sec-telemetry">
+
+      <!-- Live surface telemetry hero -->
+      <div class="xl:col-span-4 glass-panel rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between group">
+        <div class="absolute -top-24 -right-24 w-60 h-60 bg-blue-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-24 -left-24 w-60 h-60 bg-cyanGlow/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div>
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800/80">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+              <h2 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400">Surface Telemetry &amp; Ingestion</h2>
+            </div>
+            <span class="text-xs font-mono text-slate-400 bg-space-900/80 px-2.5 py-1 rounded-md border border-slate-800" id="observedAt">ISO 8601: --</span>
+          </div>
+
+          <div class="my-6 flex items-center justify-between">
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-6xl font-bold tracking-tight text-white font-sans" id="liveTemp">--</span>
+                <span class="text-2xl font-light text-cyan-400 font-mono">&deg;C</span>
+              </div>
+              <div class="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                <span>Feels like <strong class="text-slate-200" id="feelsLike">--</strong></span>
+                <span class="text-slate-600">&bull;</span>
+                <span class="font-medium" id="departureBadge">&Delta; --</span>
+              </div>
+              <div class="text-xs text-cyan-300 font-mono mt-1" id="conditionText">--</div>
+            </div>
+
+            <div class="relative w-28 h-28 flex items-center justify-center">
+              <div class="absolute inset-0 bg-blue-500/20 rounded-full blur-xl"></div>
+              <div id="weatherIcon" class="relative z-10"></div>
+            </div>
+          </div>
+
+          <div class="bg-space-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
+            <div class="flex justify-between text-xs font-mono text-slate-300">
+              <span class="flex items-center gap-1.5"><strong class="text-blue-400">Min:</strong> <span id="todayMin">--</span></span>
+              <span class="text-slate-400">Diurnal Spread (<span id="diurnal">--</span>)</span>
+              <span class="flex items-center gap-1.5"><strong class="text-amber-400">Max:</strong> <span id="todayMax">--</span></span>
+            </div>
+            <div class="h-2 w-full bg-space-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+              <div class="h-full bg-gradient-to-r from-blue-500 via-cyan-400 to-amber-500 rounded-full" id="diurnalBar" style="width: 0%; margin-left: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="bg-space-900/70 p-3 rounded-xl border border-slate-800/80 hover:border-cyan-500/40 transition-colors">
+              <div class="flex items-center justify-between text-slate-400 text-xs">
+                <span>Precip Likelihood</span>
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+              </div>
+              <div class="text-xl font-bold text-white font-mono mt-1"><span id="precipProb">--</span> <span class="text-xs font-normal text-cyan-400">%</span></div>
+              <span class="text-[11px] text-cyan-300 font-mono" id="precipPeak">Probability peak --</span>
+            </div>
+
+            <div class="bg-space-900/70 p-3 rounded-xl border border-slate-800/80 hover:border-blue-500/40 transition-colors">
+              <div class="flex items-center justify-between text-slate-400 text-xs">
+                <span>Barometric Press.</span>
+                <span class="text-[10px] font-mono" id="pressureTrendLabel">--</span>
+              </div>
+              <div class="text-xl font-bold text-white font-mono mt-1"><span id="pressure">--</span> <span class="text-xs font-normal text-slate-400">hPa</span></div>
+              <span class="text-[11px] text-slate-400 font-mono" id="pressureTrend">-- hPa / 3h trend</span>
+            </div>
+
+            <div class="bg-space-900/70 p-3 rounded-xl border border-slate-800/80 hover:border-violet-500/40 transition-colors">
+              <div class="flex items-center justify-between text-slate-400 text-xs">
+                <span>Dew Point Vector</span>
+                <span class="text-[10px] font-mono" id="humidityLabel">--</span>
+              </div>
+              <div class="text-xl font-bold text-white font-mono mt-1"><span id="dewPoint">--</span> <span class="text-xs font-normal text-violet-400">&deg;C</span></div>
+              <span class="text-[11px] text-slate-400 font-mono">RH Spread: <span id="rhSpread">--</span></span>
+            </div>
+
+            <div class="bg-space-900/70 p-3 rounded-xl border border-slate-800/80 hover:border-emerald-500/40 transition-colors">
+              <div class="flex items-center justify-between text-slate-400 text-xs">
+                <span>Cloud Cover</span>
+                <span class="text-[10px] text-slate-400 font-mono" id="cloudOktas">--</span>
+              </div>
+              <div class="text-xl font-bold text-white font-mono mt-1"><span id="cloudCover">--</span> <span class="text-xs font-normal text-slate-400">%</span></div>
+              <span class="text-[11px] text-emerald-400 font-mono" id="cloudNote">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-start gap-2.5 text-xs text-slate-300">
+          <span class="px-1.5 py-0.5 rounded bg-blue-500/20 text-cyan-300 text-[10px] font-mono uppercase font-semibold mt-0.5">Metar Info</span>
+          <p class="leading-relaxed" id="metarText">Awaiting live ingestion from the station node...</p>
+        </div>
+      </div>
+
+      <!-- Geospatial station grid -->
+      <div class="xl:col-span-8 glass-panel rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden dot-grid-bg" id="sec-geo">
+        <div class="flex flex-wrap items-center justify-between gap-4 z-10 border-b border-slate-800 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
+              <h2 class="text-sm font-semibold tracking-wide text-white uppercase font-mono">Geospatial Station Grid &amp; Terrain Layering</h2>
+            </div>
+            <p class="text-xs text-slate-400">AWS network plotted on lat/lon with live thermal state and dataset climatology</p>
+          </div>
+          <div class="flex items-center gap-1.5 bg-space-900/90 p-1 rounded-xl border border-slate-800 text-xs font-mono" id="mapLayers">
+            <button data-layer="temp" class="layer-pill px-2.5 py-1 rounded-lg bg-blue-600/40 text-cyan-300 font-medium border border-blue-500/40 flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Temperature
+            </button>
+            <button data-layer="humidity" class="layer-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Humidity</button>
+            <button data-layer="elevation" class="layer-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Elevation</button>
+            <button data-layer="heatwave" class="layer-pill px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">Heatwave Days</button>
+          </div>
+        </div>
+
+        <div class="relative my-4 w-full h-[340px] rounded-xl bg-space-950/80 border border-slate-800/80 overflow-hidden flex items-center justify-center" id="mapCanvasWrap">
+          <svg class="absolute inset-0 w-full h-full opacity-40" preserveAspectRatio="none">
+            <path d="M-50,150 Q100,80 300,120 T600,100 T900,180 T1200,90" fill="none" stroke="#2b4274" stroke-dasharray="3,3" stroke-width="1.5"></path>
+            <path d="M-50,220 Q150,200 450,240 T850,210 T1300,280" fill="none" stroke="#2b4274" stroke-width="1"></path>
+            <path d="M50,0 Q180,180 320,220 T650,280 T1100,320" fill="none" stroke="#1f3056" stroke-width="1"></path>
+          </svg>
+
+          <div class="absolute w-[440px] h-[440px] rounded-full border border-blue-500/20 pointer-events-none"></div>
+          <div class="absolute w-[300px] h-[300px] rounded-full border border-blue-500/30 pointer-events-none"></div>
+          <div class="absolute w-[160px] h-[160px] rounded-full border border-cyan-500/40 pointer-events-none"></div>
+          <div class="absolute inset-x-0 h-px bg-blue-500/20"></div>
+          <div class="absolute inset-y-0 w-px bg-blue-500/20"></div>
+          <div class="absolute w-[440px] h-[440px] radar-sweep pointer-events-none">
+            <div class="w-1/2 h-1/2 origin-bottom-right" style="background: conic-gradient(from 180deg at 100% 100%, rgba(0, 242, 254, 0.28) 0deg, transparent 65deg);"></div>
+          </div>
+
+          <!-- station markers are injected here -->
+          <div class="absolute inset-0" id="stationLayer"></div>
+
+          <div class="absolute bottom-2.5 left-3 px-2 py-1 rounded bg-space-900/90 border border-slate-800 text-[10px] font-mono text-slate-400" id="mapExtent">
+            Extent: -- | Projection: equirectangular
+          </div>
+
+          <div class="absolute bottom-2.5 right-3 bg-space-900/90 px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
+            <span class="text-[10px] font-mono text-slate-400" id="scaleUnit">&deg;C</span>
+            <div class="w-32 h-2.5 rounded bg-gradient-to-r from-cyan-600 via-emerald-400 via-amber-400 to-rose-600"></div>
+            <div class="flex justify-between text-[9px] font-mono text-slate-400 gap-1">
+              <span id="scaleLow">--</span><span id="scaleMid">--</span><span id="scaleHigh">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 z-10 text-xs font-mono">
+          <div class="p-2 rounded-lg bg-space-900/70 border border-slate-800/80">
+            <div class="text-slate-400 text-[11px]">Hottest Station (avg Tmax)</div>
+            <div class="text-white font-semibold text-sm" id="hottestStation">--</div>
+          </div>
+          <div class="p-2 rounded-lg bg-space-900/70 border border-slate-800/80">
+            <div class="text-slate-400 text-[11px]">Station Elevation</div>
+            <div class="text-white font-semibold text-sm"><span id="stationElev">--</span> <span class="text-slate-400 text-xs" id="terrainTag">--</span></div>
+          </div>
+          <div class="p-2 rounded-lg bg-space-900/70 border border-slate-800/80">
+            <div class="text-slate-400 text-[11px]">Heatwave Days on Record</div>
+            <div class="text-white font-semibold text-sm"><span id="heatwaveDays">--</span> <span class="text-amber-400 text-xs" id="heatwaveRate">--</span></div>
+          </div>
+          <div class="p-2 rounded-lg bg-space-900/70 border border-slate-800/80">
+            <div class="text-slate-400 text-[11px]">Live Alert State</div>
+            <div class="font-semibold text-sm" id="alertState">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SECTION 2: Time series + forecast, distribution ===== -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6" id="sec-series">
+      <div class="xl:col-span-8 glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-violet-400"></span>
+              <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Multi-Parametric Time Series &amp; Harmonic Forecast</h3>
+            </div>
+            <p class="text-xs text-slate-400" id="seriesSubtitle">Dataset telemetry vs least-squares seasonal projection with 95% CI ribbon</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-mono">
+            <div class="flex items-center gap-1.5"><span class="w-3 h-1 bg-cyan-400 rounded-full"></span><span class="text-slate-300">Tmax (&deg;C)</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-1 bg-emerald-400 rounded-full"></span><span class="text-slate-300">Tmin (&deg;C)</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-1 bg-violet-400 rounded-full"></span><span class="text-violet-300">Predicted</span></div>
+          </div>
+        </div>
+
+        <div class="w-full h-72 mt-4 relative"><canvas id="seriesChart"></canvas></div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+          <div class="flex items-center gap-4 flex-wrap">
+            <span class="text-slate-400">Model: <span class="text-slate-200 font-semibold">Harmonic LS (2 orders) via normal equation</span></span>
+            <span class="text-slate-400">RMSE: <span class="text-cyan-400 font-semibold" id="fcRmse">--</span></span>
+            <span class="text-slate-400">R&sup2;: <span class="text-emerald-400 font-semibold" id="fcR2">--</span></span>
+            <span class="text-slate-400">&sigma;<sub>resid</sub>: <span class="text-slate-200" id="fcSigma">--</span></span>
+          </div>
+          <span class="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px]">Confidence Envelope: 95%</span>
+        </div>
+      </div>
+
+      <!-- Statistical distribution -->
+      <div class="xl:col-span-4 glass-panel rounded-2xl p-6 flex flex-col justify-between" id="sec-matrix">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Statistical Distribution</h3>
+            </div>
+            <select id="distColumn" class="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/60 focus:outline-none">
+              <option value="tmax_c">tmax_c</option>
+              <option value="tmin_c">tmin_c</option>
+              <option value="mean_temp_c">mean_temp_c</option>
+              <option value="rh_mean_pct">rh_mean_pct</option>
+              <option value="wind_speed_kmph">wind_speed_kmph</option>
+              <option value="pressure_hpa">pressure_hpa</option>
+              <option value="diurnal_temp_range_c">diurnal_range</option>
+              <option value="departure_tmax_c">departure_tmax</option>
+            </select>
+          </div>
+
+          <div class="mt-4">
+            <div class="flex justify-between text-xs font-mono text-slate-400 mb-1">
+              <span>Frequency Density</span>
+              <span>KDE Fit (N=<span id="kdeN">--</span>)</span>
+            </div>
+            <div class="h-36 w-full relative"><canvas id="distChart"></canvas></div>
+
+            <div class="mt-2 pt-2 border-t border-slate-800">
+              <div class="text-[11px] font-mono text-slate-400 flex justify-between mb-1">
+                <span>Box-Plot Quantiles</span><span class="text-slate-300">IQR: <span id="statIqr">--</span></span>
+              </div>
+              <div class="relative h-6 bg-space-950 rounded-lg border border-slate-800/80" id="boxPlot"></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 mt-4 text-xs font-mono">
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Mean (&mu;):</span><span class="text-white font-semibold" id="statMean">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Std Dev (&sigma;):</span><span class="text-cyan-300 font-semibold" id="statStd">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Median:</span><span class="text-white font-semibold" id="statMedian">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Mode:</span><span class="text-white font-semibold" id="statMode">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Skewness:</span><span class="text-emerald-400 font-semibold" id="statSkew">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Kurtosis:</span><span class="text-slate-200 font-semibold" id="statKurt">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">Variance:</span><span class="text-slate-200 font-semibold" id="statVar">--</span></div>
+            <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">CV:</span><span class="text-slate-200 font-semibold" id="statCv">--</span></div>
+          </div>
+
+          <div class="mt-3 text-[10px] font-mono text-slate-500 bg-space-950/70 border border-slate-800 rounded-lg p-2">
+            Grouped estimate (10 classes) &mdash; mean <span class="text-slate-300" id="gMean">--</span>,
+            median <span class="text-slate-300" id="gMedian">--</span>,
+            mode <span class="text-slate-300" id="gMode">--</span>,
+            &sigma; <span class="text-slate-300" id="gStd">--</span>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-3 border-t border-slate-800 flex justify-between text-[11px] font-mono text-slate-400">
+          <div>P25: <span class="text-slate-200" id="p25">--</span></div>
+          <div>P50: <span class="text-amber-400 font-semibold" id="p50">--</span></div>
+          <div>P75: <span class="text-slate-200" id="p75">--</span></div>
+          <div>P99: <span class="text-rose-400" id="p99">--</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SECTION 3: Heatmap matrix, correlation, gauges ===== -->
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6">
+      <!-- Month x Year density matrix -->
+      <div class="xl:col-span-5 glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyanGlow"></span>
+              <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Climate Density Matrix</h3>
+            </div>
+            <select id="heatMetric" class="text-xs font-mono text-slate-300 bg-space-900 border border-slate-800 rounded px-2 py-0.5 focus:outline-none">
+              <option value="tmax_c">Month &times; Year (Tmax &deg;C)</option>
+              <option value="tmin_c">Month &times; Year (Tmin &deg;C)</option>
+              <option value="rh_mean_pct">Month &times; Year (RH %)</option>
+              <option value="wind_speed_kmph">Month &times; Year (Wind km/h)</option>
+            </select>
+          </div>
+          <div class="mt-4 overflow-x-auto"><table class="w-full text-center border-collapse" id="heatTable"></table></div>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-400">
+          <span>Intensity Scale:</span>
+          <div class="flex items-center gap-1" id="heatLegend"></div>
+        </div>
+      </div>
+
+      <!-- Correlation matrix -->
+      <div class="xl:col-span-3 glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+              <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Correlation Matrix</h3>
+            </div>
+            <span class="text-xs font-mono text-slate-400">Pearson (r)</span>
+          </div>
+          <div class="mt-4 overflow-x-auto"><div id="corrGrid" class="text-[10px] font-mono text-center min-w-[240px]"></div></div>
+          <div class="mt-3 space-y-1 text-[10px] font-mono" id="corrPairs"></div>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono">
+          <span class="text-rose-400">-1.0 (Inverse)</span><span class="text-slate-500">0.0</span><span class="text-cyan-400">+1.0 (Direct)</span>
+        </div>
+      </div>
+
+      <!-- Environmental gauges -->
+      <div class="xl:col-span-4 glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-violetGlow"></span>
+              <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Environmental Gauges</h3>
+            </div>
+            <span class="text-xs font-mono text-emerald-400" id="sensorState">Live feed</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 mt-4">
+            <div class="bg-space-900/80 p-3 rounded-xl border border-slate-800 text-center flex flex-col items-center">
+              <div class="text-xs font-mono text-slate-400">Solar UV Index</div>
+              <div class="w-24 h-14 relative mt-2">
+                <svg class="w-full h-full" viewBox="0 0 100 55">
+                  <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" stroke-linecap="round" stroke-width="8"></path>
+                  <path id="uvArc" d="M 10 50 A 40 40 0 0 1 10 50" fill="none" stroke="#f59e0b" stroke-linecap="round" stroke-width="8"></path>
+                </svg>
+                <div class="absolute inset-x-0 bottom-0 text-center"><span class="text-lg font-bold text-white font-mono" id="uvValue">--</span></div>
+              </div>
+              <span class="text-[10px] font-mono text-amber-400 mt-1 uppercase tracking-wider" id="uvLabel">--</span>
+            </div>
+
+            <div class="bg-space-900/80 p-3 rounded-xl border border-slate-800 text-center flex flex-col items-center">
+              <div class="text-xs font-mono text-slate-400">AQI (European)</div>
+              <div class="w-24 h-14 relative mt-2">
+                <svg class="w-full h-full" viewBox="0 0 100 55">
+                  <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" stroke-linecap="round" stroke-width="8"></path>
+                  <path id="aqiArc" d="M 10 50 A 40 40 0 0 1 10 50" fill="none" stroke="#10b981" stroke-linecap="round" stroke-width="8"></path>
+                </svg>
+                <div class="absolute inset-x-0 bottom-0 text-center"><span class="text-lg font-bold text-white font-mono" id="aqiValue">--</span></div>
+              </div>
+              <span class="text-[10px] font-mono mt-1 uppercase tracking-wider" id="aqiLabel">--</span>
+            </div>
+          </div>
+
+          <div class="space-y-2 mt-4 text-xs font-mono">
+            <div class="flex justify-between items-center bg-space-900/50 px-3 py-1.5 rounded-lg border border-slate-800"><span class="text-slate-400">PM2.5 Concentration:</span><span class="text-slate-200 font-semibold" id="pm25">--</span></div>
+            <div class="flex justify-between items-center bg-space-900/50 px-3 py-1.5 rounded-lg border border-slate-800"><span class="text-slate-400">PM10 Concentration:</span><span class="text-slate-200 font-semibold" id="pm10">--</span></div>
+            <div class="flex justify-between items-center bg-space-900/50 px-3 py-1.5 rounded-lg border border-slate-800"><span class="text-slate-400">Station Normal Tmax:</span><span class="text-amber-300 font-semibold" id="normalTmax">--</span></div>
+            <div class="flex justify-between items-center bg-space-900/50 px-3 py-1.5 rounded-lg border border-slate-800"><span class="text-slate-400">Record Tmax (&plusmn;5 days):</span><span class="text-rose-300 font-semibold" id="recordTmax">--</span></div>
+          </div>
+        </div>
+        <div class="mt-4 pt-2 border-t border-slate-800 flex justify-between text-[11px] font-mono text-slate-500">
+          <span id="providerTag">Provider: --</span><span class="text-emerald-400" id="lastSync">Synced --</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SECTION 4: Live secondary highlights ===== -->
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div class="glass-panel rounded-2xl p-5 flex flex-col justify-between">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <span class="text-xs font-mono uppercase text-slate-400 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            Wind Dynamics
+          </span>
+          <span class="text-xs font-mono text-cyan-300" id="windDir">--</span>
+        </div>
+        <div class="flex items-center justify-between my-3">
+          <div>
+            <div class="text-3xl font-bold font-mono text-white"><span id="windSpeed">--</span> <span class="text-sm font-normal text-slate-400">km/h</span></div>
+            <div class="text-xs font-mono text-slate-400 mt-0.5">Gusting to <span id="windGust">--</span></div>
+          </div>
+          <div class="w-16 h-16 rounded-full border border-slate-700 bg-space-950 flex items-center justify-center relative shadow-inner">
+            <span class="absolute top-0.5 text-[8px] font-mono text-slate-500">N</span>
+            <span class="absolute bottom-0.5 text-[8px] font-mono text-slate-500">S</span>
+            <span class="absolute left-1 text-[8px] font-mono text-slate-500">W</span>
+            <span class="absolute right-1 text-[8px] font-mono text-slate-500">E</span>
+            <svg id="compassArrow" class="w-8 h-8 text-cyan-400 filter drop-shadow" fill="currentColor" viewBox="0 0 24 24" style="transform: rotate(0deg);">
+              <path d="M12 2L15 11H9L12 2Z"></path><path d="M12 22L9 13H15L12 22Z" fill="#64748b"></path>
+            </svg>
+          </div>
+        </div>
+        <div class="w-full bg-space-950 rounded-full h-1.5 overflow-hidden"><div class="bg-cyan-400 h-full rounded-full" id="windBar" style="width: 0%;"></div></div>
+        <div class="text-[10px] font-mono text-slate-500 mt-1.5">Dataset mean: <span id="windNormal">--</span></div>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-5 flex flex-col justify-between">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <span class="text-xs font-mono uppercase text-slate-400 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            Atmospheric Moisture
+          </span>
+          <span class="text-xs font-mono text-emerald-400" id="saturationLabel">--</span>
+        </div>
+        <div class="flex items-baseline justify-between my-3">
+          <div>
+            <div class="text-3xl font-bold font-mono text-white"><span id="humidity">--</span> <span class="text-sm font-normal text-blue-400">%</span></div>
+            <div class="text-xs font-mono text-slate-400 mt-0.5">Vapour Pressure: <span id="vapourPressure">--</span></div>
+          </div>
+          <div class="text-right font-mono text-xs text-slate-400">
+            <div>Mixing Ratio:</div><div class="text-white font-semibold" id="mixingRatio">--</div>
+          </div>
+        </div>
+        <div class="w-full bg-space-950 rounded-full h-1.5 overflow-hidden"><div class="bg-gradient-to-r from-cyan-400 to-blue-600 h-full rounded-full" id="humidityBar" style="width: 0%;"></div></div>
+        <div class="text-[10px] font-mono text-slate-500 mt-1.5">Dataset mean RH: <span id="rhNormal">--</span></div>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-5 flex flex-col justify-between">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <span class="text-xs font-mono uppercase text-slate-400 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            Optical Visibility
+          </span>
+          <span class="text-xs font-mono text-slate-400">Model field</span>
+        </div>
+        <div class="flex items-baseline justify-between my-3">
+          <div>
+            <div class="text-3xl font-bold font-mono text-white"><span id="visibility">--</span> <span class="text-sm font-normal text-slate-400">km</span></div>
+            <div class="text-xs font-mono text-emerald-400 mt-0.5" id="visibilityNote">--</div>
+          </div>
+          <div class="text-right font-mono text-xs text-slate-400">
+            <div>Precip (24h):</div><div class="text-white font-semibold" id="precipSum">--</div>
+          </div>
+        </div>
+        <div class="w-full bg-space-950 rounded-full h-1.5 overflow-hidden"><div class="bg-emerald-400 h-full rounded-full" id="visibilityBar" style="width: 0%;"></div></div>
+        <div class="text-[10px] font-mono text-slate-500 mt-1.5">Condition: <span id="visibilityCondition">--</span></div>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-5 flex flex-col justify-between">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <span class="text-xs font-mono uppercase text-slate-400 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            Solar Ephemeris
+          </span>
+          <span class="text-xs font-mono text-amber-400">Daylight: <span id="daylight">--</span></span>
+        </div>
+        <div class="w-full h-14 relative mt-2">
+          <svg class="w-full h-full" viewBox="0 0 160 50">
+            <path d="M 10 45 Q 80 5 150 45" fill="none" stroke="#334155" stroke-dasharray="3,3" stroke-width="2"></path>
+            <path id="solarArc" d="M 10 45 Q 10 45 10 45" fill="none" stroke="#f59e0b" stroke-width="2.5"></path>
+            <circle id="sunDot" cx="10" cy="45" fill="#fbbf24" r="4.5" stroke="#070a13" stroke-width="2"></circle>
+            <line stroke="#1e293b" stroke-width="1" x1="10" x2="150" y1="46" y2="46"></line>
+          </svg>
+        </div>
+        <div class="flex justify-between text-xs font-mono text-slate-400 pt-1">
+          <span>Rise: <strong class="text-slate-200" id="sunrise">--</strong></span>
+          <span>Now: <strong class="text-slate-200" id="localTime">--</strong></span>
+          <span>Set: <strong class="text-slate-200" id="sunset">--</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SECTION 5: Regression lab ===== -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6" id="sec-regression">
+      <div class="xl:col-span-4 glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-cyanGlow"></span>
+            <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Simple Linear Regression</h3>
+          </div>
+          <span class="text-xs font-mono text-slate-400">Least squares</span>
+        </div>
+        <div class="h-56 mt-3"><canvas id="slrChart"></canvas></div>
+        <div class="mt-3 text-[10px] font-mono text-slate-400 bg-space-950/70 border border-slate-800 rounded-lg p-2 break-all" id="slrEquation">--</div>
+        <div class="grid grid-cols-3 gap-2 mt-2 text-[11px] font-mono">
+          <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">MAE</span><span class="text-cyan-300" id="slrMae">--</span></div>
+          <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">RMSE</span><span class="text-cyan-300" id="slrRmse">--</span></div>
+          <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">R&sup2;</span><span class="text-emerald-400" id="slrR2">--</span></div>
+        </div>
+      </div>
+
+      <div class="xl:col-span-4 glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-violetGlow"></span>
+            <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Multiple Linear Regression</h3>
+          </div>
+          <span class="text-xs font-mono text-slate-400">Normal equation</span>
+        </div>
+        <div class="h-56 mt-3"><canvas id="mlrChart"></canvas></div>
+        <div class="mt-3 text-[10px] font-mono text-slate-400 bg-space-950/70 border border-slate-800 rounded-lg p-2 break-all" id="mlrEquation">--</div>
+        <div class="grid grid-cols-3 gap-2 mt-2 text-[11px] font-mono">
+          <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">MAE</span><span class="text-violet-300" id="mlrMae">--</span></div>
+          <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">RMSE</span><span class="text-violet-300" id="mlrRmse">--</span></div>
+          <div class="bg-space-900/80 p-2 rounded-lg border border-slate-800 flex justify-between"><span class="text-slate-400">R&sup2;</span><span class="text-emerald-400" id="mlrR2">--</span></div>
+        </div>
+      </div>
+
+      <div class="xl:col-span-4 glass-panel rounded-2xl p-6 flex flex-col">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+            <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Aggregation &amp; Encoding</h3>
+          </div>
+          <span class="text-xs font-mono text-slate-400">GroupBy suite</span>
+        </div>
+        <div class="h-40 mt-3"><canvas id="aggChart"></canvas></div>
+        <div class="mt-3 grid grid-cols-2 gap-2 text-[10px] font-mono" id="encodingGrid"></div>
+        <div class="mt-3 pt-2 border-t border-slate-800 text-[10px] font-mono text-slate-400" id="rankingNote">--</div>
+      </div>
+    </div>
+
+    <!-- ===== SECTION 6: Pipeline & data quality ===== -->
+    <div class="glass-panel-subtle rounded-2xl p-5 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4" id="sec-pipeline">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+        </div>
+        <div>
+          <h4 class="text-xs font-mono font-semibold text-white uppercase tracking-wider">Station Telemetry Pipeline &amp; Anomaly Engine</h4>
+          <p class="text-xs text-slate-400">IQR filtering (1.5 &times; IQR) over <span id="pipelineRows">--</span> records &bull; <span id="pipelineRange">--</span></p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-6 text-xs font-mono">
+        <div><span class="text-slate-500 block">SENSOR COMPLETENESS</span><span class="text-emerald-400 font-bold" id="qCompleteness">--</span></div>
+        <div><span class="text-slate-500 block">OUTLIERS FLAGGED</span><span class="text-amber-400 font-bold" id="qOutliers">--</span></div>
+        <div><span class="text-slate-500 block">DUPLICATES</span><span class="text-cyan-300 font-bold" id="qDuplicates">--</span></div>
+        <div><span class="text-slate-500 block">ROWS AFTER TRIM</span><span class="text-slate-200 font-bold" id="qTrimmed">--</span></div>
+        <div><span class="text-slate-500 block">SYNC STATE</span><span class="text-emerald-400 font-bold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> <span id="qSync">Synced</span></span></div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="exportJson" class="px-3.5 py-1.5 bg-space-800 hover:bg-space-700 text-slate-200 rounded-xl text-xs font-mono border border-slate-700 transition-colors">Export JSON</button>
+        <button id="showDiagnostics" class="px-3.5 py-1.5 bg-blue-600/40 hover:bg-blue-600/60 text-cyan-300 rounded-xl text-xs font-mono border border-cyan-500/40 transition-colors glow-blue-box">Model Diagnostics</button>
+      </div>
+    </div>
+
+    <!-- Diagnostics drawer -->
+    <div id="diagnosticsPanel" class="hidden glass-panel rounded-2xl p-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-semibold tracking-wide text-white font-mono uppercase">Attribute Taxonomy &amp; Outlier Ledger</h3>
+        <button id="closeDiagnostics" class="text-xs font-mono text-slate-400 hover:text-slate-200">close</button>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+        <div class="overflow-auto max-h-96"><table class="w-full text-left text-[11px] font-mono" id="taxonomyTable"></table></div>
+        <div class="overflow-auto max-h-96"><table class="w-full text-left text-[11px] font-mono" id="outlierTable"></table></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
