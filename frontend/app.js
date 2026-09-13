@@ -1015,6 +1015,9 @@ async function refreshField(force = false) {
   state.fieldBox = box;
   const status = $("fieldStatus");
   status.hidden = false;
+  // With a map already drawn, a refresh shows as a small corner badge so the
+  // current map stays readable; only a first load takes the full overlay.
+  setFieldStatusMode(state.fieldGrid ? "badge" : "overlay");
   status.textContent = `Sampling ${n * n} live grid cells over ${box.label}...`;
   renderFieldTabs();
 
@@ -1031,6 +1034,7 @@ async function refreshField(force = false) {
     if (state.fieldKey !== key) return;
     state.fieldKey = null;                       // let the next attempt refetch
     status.hidden = false;
+    setFieldStatusMode("overlay");               // errors need the room for their button
     const throttled = /429/.test(String(err && err.message));
     status.innerHTML =
       `<div class="text-center space-y-3 px-6">
@@ -1044,6 +1048,15 @@ async function refreshField(force = false) {
        </div>`;
     $("fieldRetry")?.addEventListener("click", () => refreshField(true));
   }
+}
+
+/** Full overlay for a first load or an error; a corner badge over an existing map. */
+function setFieldStatusMode(mode) {
+  const status = $("fieldStatus");
+  if (!status) return;
+  status.className = mode === "badge"
+    ? "absolute top-3 right-3 px-3 py-1.5 rounded-lg text-[11px] font-mono text-slate-300 bg-space-900/90 border border-slate-800 shadow"
+    : "absolute inset-0 flex items-center justify-center text-xs font-mono text-slate-400 bg-space-950/70";
 }
 
 /** Load the grid only when its panel is on screen - off-screen maps cost quota. */

@@ -14,6 +14,7 @@ Usage:  python scripts/build_static.py [--out docs]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -57,11 +58,20 @@ def main() -> None:
     # ---- the page itself -------------------------------------------------
     frontend = ROOT / "frontend"
     html = (frontend / "index.html").read_text(encoding="utf-8")
+    # GitHub Pages lets browsers cache scripts for 10 minutes, so a deploy could
+    # keep running old code for that long.  Stamp each script URL with a hash of
+    # its contents: a changed file gets a new URL and is fetched immediately.
+    def stamp(name: str) -> str:
+        digest = hashlib.sha256((frontend / name).read_bytes()).hexdigest()[:10]
+        return f"{name}?v={digest}"
+
     html = html.replace(
         '<script src="static-source.js"></script>',
         '<script>window.AETHERCAST_STATIC = true;</script>\n'
-        '<script src="static-source.js"></script>',
+        f'<script src="{stamp("static-source.js")}"></script>',
     )
+    html = html.replace('<script src="app.js"></script>',
+                        f'<script src="{stamp("app.js")}"></script>')
     (out / "index.html").write_text(html, encoding="utf-8")
     shutil.copy(frontend / "app.js", out / "app.js")
     shutil.copy(frontend / "static-source.js", out / "static-source.js")
