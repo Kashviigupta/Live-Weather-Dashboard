@@ -262,6 +262,17 @@
     const hit = fieldCache.get(key);
     if (hit && Date.now() - hit.at < FIELD_TTL_MS) return hit.data;
 
+    // Survive reloads too: every visitor's browser spends its own quota, so a
+    // reload inside the TTL should not sample the grid again.
+    const storeKey = "aethercast-field:" + key;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storeKey) || "null");
+      if (saved && Date.now() - saved.at < FIELD_TTL_MS) {
+        fieldCache.set(key, saved);
+        return saved.data;
+      }
+    } catch (e) { /* storage unavailable or full */ }
+
     const axis = (lo, hi) =>
       Array.from({ length: n }, (_, k) => +(lo + ((hi - lo) * k) / (n - 1)).toFixed(4));
     const lats = axis(latMin, latMax), lons = axis(lonMin, lonMax);
@@ -274,7 +285,7 @@
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const results = [];
     for (let s = 0; s < points.length; s += 90) {
-      if (s) await sleep(300);
+      if (s) await sleep(1200);
       const chunk = points.slice(s, s + 90);
       const q = new URLSearchParams({
         latitude: chunk.map((p) => p[0]).join(","),
@@ -284,11 +295,13 @@
         timezone: "UTC", wind_speed_unit: "kmh",
       });
 
+      // One patient retry only: hammering a 429 deepens the throttle and eats
+      // the quota the live card needs.
       let data = null;
-      for (let attempt = 1; attempt <= 4; attempt++) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
         const r = await fetch(`${FORECAST_URL}?${q}`);
         if (r.ok) { data = await r.json(); break; }
-        if ((r.status === 429 || r.status >= 500) && attempt < 4) { await sleep(1500 * attempt); continue; }
+        if ((r.status === 429 || r.status >= 500) && attempt < 2) { await sleep(6000); continue; }
         throw new Error(`field grid HTTP ${r.status}`);
       }
       results.push(...(Array.isArray(data) ? data : [data]));
@@ -305,7 +318,9 @@
       observed_at: ((results[0] || {}).current || {}).time || null,
       fields, provider: "Open-Meteo (browser)",
     };
-    fieldCache.set(key, { at: Date.now(), data });
+    const entry = { at: Date.now(), data };
+    fieldCache.set(key, entry);
+    try { localStorage.setItem(storeKey, JSON.stringify(entry)); } catch (e) { /* ignore */ }
     return data;
   }
 

@@ -999,9 +999,11 @@ function renderFieldLabels(g) {
 async function refreshField(force = false) {
   if (!$("fieldCanvas")) return;
   const box = fieldBBox();
-  // 20x20 over India (5 batches) stays well inside the per-minute quota and
-  // reads just as smooth once interpolated; a state box gets a finer 22x22
-  const n = state.fieldExtent === "india" ? 20 : 22;
+  // Every grid point counts against the provider's quota, which the live card
+  // shares.  14x14 (196 points, 3 batches) over India and 12x12 (144 points)
+  // for a state interpolate into the same smooth surface at a third of the
+  // cost of the earlier 20-22 point grids, which were exhausting the quota.
+  const n = state.fieldExtent === "india" ? 14 : 12;
   const key = [box.lat_min, box.lat_max, box.lon_min, box.lon_max, n].join("|");
 
   if (!force && state.fieldKey === key && state.fieldGrid) {
@@ -1027,9 +1029,31 @@ async function refreshField(force = false) {
   } catch (err) {
     console.error(err);
     if (state.fieldKey !== key) return;
+    state.fieldKey = null;                       // let the next attempt refetch
     status.hidden = false;
-    status.textContent = "Live field unavailable right now - the rest of the dashboard is unaffected.";
+    const throttled = /429/.test(String(err && err.message));
+    status.innerHTML =
+      `<div class="text-center space-y-3 px-6">
+         <div>${throttled
+           ? "The live weather provider is rate-limiting requests right now."
+           : "Live field unavailable right now."}
+           The rest of the dashboard is unaffected.</div>
+         <button type="button" id="fieldRetry"
+                 class="px-3 py-1.5 rounded-lg border border-slate-700 bg-space-850 text-slate-200 hover:text-cyan-300 transition-colors">
+           Try again</button>
+       </div>`;
+    $("fieldRetry")?.addEventListener("click", () => refreshField(true));
   }
+}
+
+/** Load the grid only when its panel is on screen - off-screen maps cost quota. */
+function refreshFieldIfVisible() {
+  const panel = $("fieldWrap");
+  if (!panel) return;
+  const r = panel.getBoundingClientRect?.();
+  const onScreen = !r || (r.bottom > 0 && r.top < (window.innerHeight || 800));
+  if (onScreen) refreshField();
+  else state.fieldPending = true;                // the observer picks it up later
 }
 
 function wireFieldMaps() {
@@ -1053,7 +1077,20 @@ function wireFieldMaps() {
     resizeTimer = setTimeout(() => state.fieldGrid && renderFieldLabels(state.fieldGrid), 150);
   });
 
-  setInterval(() => refreshField(true), FIELD_REFRESH_MS);
+  // fetch deferred maps when the panel scrolls into view
+  if (typeof IntersectionObserver !== "undefined") {
+    new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting) && state.fieldPending) {
+        state.fieldPending = false;
+        refreshField();
+      }
+    }, { rootMargin: "200px" }).observe($("fieldWrap"));
+  }
+
+  // periodic refresh only while the tab is visible and a grid is on show
+  setInterval(() => {
+    if (document.visibilityState === "visible" && state.fieldGrid) refreshField(true);
+  }, FIELD_REFRESH_MS);
   renderFieldTabs();
 }
 
@@ -1397,8 +1434,11 @@ async function refreshLive() {
   if (!location) return;
   try {
     const live = await api("/api/live", { location });
+    if (state.station?.location !== location) return;   // the user moved on meanwhile
     renderLive(live);
+    // re-anchor the (already drawn) forecast to the live reading
     const forecast = await api("/api/forecast", { location, live_temp: live.observation.temperature_c });
+    if (state.station?.location !== location) return;
     state.last.forecast = forecast;
     if (state.last.series) renderSeries(state.last.series, forecast, live);
     renderStationMap();
@@ -1420,13 +1460,42 @@ async function refreshLive() {
 async function selectStation(location) {
   state.station = state.stations.find((s) => s.location === location) || state.stations[0];
   renderLeagueTable();
-  const series = await loadStationAnalytics(state.station.location);
+  // drop the previous location's readings so a failed live call can never
+  // leave another station's forecast or observation on this chart
+  state.last.live = null;
+  state.last.forecast = null;
+
+  const loc = state.station.location;
+
+  // name the location from the catalogue straight away, so the header is
+  // right even when the live provider cannot be reached
+  const st = state.station;
+  $("stationTitle").classList.remove("skeleton");
+  $("stationTitle").textContent =
+    st.kind === "City" ? `${st.station}, ${st.state}`
+    : st.source === "open-meteo-archive" ? `${st.station} (${st.kind})`
+    : `Station ${st.station} - ${st.state}`;
+  $("stationCoords").textContent =
+    `Lat: ${st.latitude.toFixed(4)} | Lon: ${st.longitude.toFixed(4)} | Alt: ${st.elevation_m} m ASL | ${st.terrain_type} / ${st.zone}`;
+
+  const series = await loadStationAnalytics(loc);
+
+  // The archive series and its harmonic forecast need no live provider, so
+  // draw them now; refreshLive re-anchors the projection if a reading arrives.
+  try {
+    const forecast = await api("/api/forecast", { location: loc });
+    if (state.station.location === loc) {
+      state.last.forecast = forecast;
+      renderSeries(series, forecast, null);
+    }
+  } catch (err) {
+    console.error("forecast unavailable:", err);
+  }
+
   await refreshLive();
-  // The grid is several hundred weighted API units; sample it only once the
-  // live card has its reading, so the map can never starve the core panel.
-  // Not awaited - the rest of the dashboard does not wait on the map.
-  refreshField();
-  if (state.last.forecast) renderSeries(series, state.last.forecast, state.last.live);
+  // The grid is heavy on the shared API quota: it loads only once the live
+  // card has had its turn, and only when the map panel is actually on screen.
+  refreshFieldIfVisible();
   scheduleRefresh();
 }
 
