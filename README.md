@@ -65,10 +65,11 @@ Exp-5 harmonic forecast client-side from the stored coefficients. Only the
 archive analytics are pre-computed — they're derived from a fixed CSV, so
 nothing is lost by building them ahead of time.
 
-First deployment: after the first push, open the repo's **Actions** tab and
-check the *Deploy dashboard to GitHub Pages* run. The workflow enables Pages on
-its own; if your account blocks that, set **Settings → Pages → Source** to
-*GitHub Actions* and re-run it. Build takes ~4 minutes (813 JSON files, ~4.4 MB).
+**One-time setup:** open **Settings → Pages** and set **Source** to *GitHub
+Actions*. The workflow token is not permitted to switch Pages on by itself, so
+the first run fails at the `configure-pages` step until this is set. Then push
+anything (or **Actions → Deploy dashboard to GitHub Pages → Run workflow**) and
+the site goes up. A build takes ~4 minutes — 813 JSON files, ~4.4 MB.
 
 To preview the exact Pages build locally:
 
