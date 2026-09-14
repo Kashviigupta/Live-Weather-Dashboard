@@ -11,3 +11,6 @@ docs/
 # region archives are committed as gzipped CSVs so builds never depend on the
 # reanalysis API; the uncompressed intermediates are not tracked
 data/cache/regions/*.csv
+
+# lock held while scripts/fetch_cities.py runs
+data/cache/.fetch_cities.lock
