@@ -152,6 +152,57 @@ function drawChart(key, canvasId, config) {
   state.charts[key] = new Chart($(canvasId).getContext("2d"), config);
 }
 
+/* --------------------------------------------------------- interactivity */
+/** Roll a number up to its new value; instant when motion is off. */
+function countUp(el, to, digits = 1) {
+  if (!el) return;
+  if (to === null || to === undefined || Number.isNaN(Number(to))) { el.textContent = "--"; return; }
+  const from = parseFloat(String(el.textContent).replace(/[^\d.-]/g, ""));
+  const target = Number(to);
+  if (!window.Sky?.motionOn?.() || Number.isNaN(from) || Math.abs(target - from) < 0.05) {
+    el.textContent = target.toFixed(digits);
+    return;
+  }
+  const t0 = performance.now(), dur = 650;
+  (function step(now) {
+    const k = Math.min(1, (now - t0) / dur);
+    const eased = 1 - Math.pow(1 - k, 3);
+    el.textContent = (from + (target - from) * eased).toFixed(digits);
+    if (k < 1) requestAnimationFrame(step);
+  })(t0);
+}
+
+/** Fade each section in the first time it scrolls into view. */
+function wireReveal() {
+  const sections = document.querySelectorAll("[data-reveal]");
+  if (!sections.length) return;
+  if (typeof IntersectionObserver === "undefined" || !window.Sky?.motionOn?.()) {
+    sections.forEach((s) => s.classList.add("reveal", "in"));
+    return;
+  }
+  sections.forEach((s) => s.classList.add("reveal"));
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add("in");
+      io.unobserve(e.target);                 // reveal once, then leave it alone
+    }
+  }, { rootMargin: "0px 0px -8% 0px", threshold: 0.04 });
+  sections.forEach((s) => io.observe(s));
+}
+
+/** Header button: pause or resume the moving background. */
+function syncMotionButton() {
+  const btn = $("motionToggle"), icon = $("motionIcon");
+  if (!btn || !icon) return;
+  const on = window.Sky?.motionOn?.() ?? true;
+  btn.title = on ? "Pause background motion" : "Resume background motion";
+  btn.setAttribute("aria-label", btn.title);
+  icon.setAttribute("d", on
+    ? "M10 9v6m4-6v6M21 12a9 9 0 11-18 0 9 9 0 0118 0z"            // pause
+    : "M10 8l6 4-6 4V8zM21 12a9 9 0 11-18 0 9 9 0 0118 0z");       // play
+}
+
 /* ------------------------------------------------------------ weather icon */
 function weatherIconSvg(icon, isDay) {
   const sun = `<circle cx="64" cy="38" r="18" fill="url(#sunGrad)" opacity="0.95"></circle>`;
@@ -187,6 +238,10 @@ function renderLive(data) {
   const n = data.normals;
   state.last.live = data;
 
+  // the wallpaper follows this observation: condition, day/night, cloud cover,
+  // the sun's real position between sunrise and sunset, and the alert level
+  try { window.Sky?.update(obs, { severity: data.severity }); } catch (err) { console.error(err); }
+
   const isRegion = st.source === "open-meteo-archive";
   $("stationTitle").classList.remove("skeleton");
   $("stationTitle").textContent =
@@ -205,7 +260,7 @@ function renderLive(data) {
     : "bg-cyan-500/10 text-cyan-300 border-cyan-500/30");
 
   $("observedAt").textContent = `ISO 8601: ${(obs.observed_at || "").replace("T", " ")} ${obs.timezone || ""}`;
-  $("liveTemp").textContent = fmt(obs.temperature_c, 1);
+  countUp($("liveTemp"), obs.temperature_c, 1);
   $("feelsLike").textContent = fmt(obs.apparent_c, 1, " C");
   $("conditionText").textContent = obs.condition;
   $("weatherIcon").innerHTML = weatherIconSvg(obs.icon, obs.is_day);
@@ -1529,7 +1584,10 @@ async function init() {
   // interactive even if an endpoint or the provider is down.
   // Wire each panel independently: one failing (a missing element, an API the
   // browser lacks) must not stop the others or the data load below it.
-  for (const wire of [wireEvents, wireLeagueTable, wireFieldMaps]) {
+  // the wallpaper starts before any data arrives, so the page never flashes flat
+  try { window.Sky?.init(); } catch (err) { console.error("Sky.init failed:", err); }
+
+  for (const wire of [wireEvents, wireLeagueTable, wireFieldMaps, wireReveal]) {
     try { wire(); } catch (err) { console.error(`${wire.name} failed:`, err); }
   }
 
@@ -1590,6 +1648,12 @@ function wireEvents() {
   syncThemeButton();
   $("themeToggle").addEventListener("click", () =>
     setTheme(currentTheme() === "light" ? "dark" : "light"));
+
+  syncMotionButton();
+  $("motionToggle").addEventListener("click", () => {
+    window.Sky?.setMotion(!(window.Sky.motionOn?.() ?? true));
+    syncMotionButton();
+  });
 
   $("rangePills").addEventListener("click", (e) => {
     const btn = e.target.closest(".range-pill");

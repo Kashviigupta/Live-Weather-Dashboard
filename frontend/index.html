@@ -198,8 +198,76 @@
     background: conic-gradient(from 180deg at 100% 100%, rgba(2,132,199,.20) 0deg, transparent 65deg) !important;
   }
 </style>
+
+<style id="sky-style">
+  /* ===================================================================
+     Sky Mirror: the page background is the weather being reported.
+     sky.js paints the layers; this sheet positions them, keeps the
+     panels legible on top, and holds the motion/reveal transitions.
+     =================================================================== */
+  html.dark { background:#05070f; }
+  html.light { background:#eef4fb; }
+  body { background-color: transparent !important; }
+
+  #skyLayer { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+  #skyLayer > * { position:absolute; inset:0; }
+  .sky-grad { transition: background 1.6s ease; }
+  .sky-canvas { width:100%; height:100%; }
+
+  /* readability wash over whatever the sky is doing */
+  .sky-scrim { background: linear-gradient(180deg, rgba(4,7,15,.60), rgba(4,7,15,.74)); transition: background .8s ease; }
+  html.light .sky-scrim { background: linear-gradient(180deg, rgba(246,250,255,.58), rgba(246,250,255,.80)); }
+  html.light .sky-grad { filter: saturate(1.08); }
+  #skyLayer.sky-hot .sky-scrim { background: linear-gradient(180deg, rgba(24,12,4,.58), rgba(10,8,14,.74)); }
+  html.light #skyLayer.sky-hot .sky-scrim { background: linear-gradient(180deg, rgba(255,247,237,.76), rgba(248,246,252,.88)); }
+  #skyLayer.sky-severe .sky-grad { filter: saturate(1.15) contrast(1.05); }
+
+  /* sun / moon on its real arc between sunrise and sunset */
+  .sky-orb { position:absolute; width:150px; height:150px; margin:-75px 0 0 -75px; inset:auto;
+             border-radius:50%; transition: left 1.4s ease, top 1.4s ease, opacity .8s ease; }
+  .sky-orb.is-sun { background: radial-gradient(circle, rgba(255,247,214,.95) 0%, rgba(255,209,102,.7) 38%, rgba(255,209,102,0) 70%); }
+  .sky-orb.is-moon { background: radial-gradient(circle, rgba(226,236,255,.85) 0%, rgba(190,210,255,.35) 42%, rgba(190,210,255,0) 70%); }
+
+  .sky-cloud { position:absolute; left:-30%; width:340px; height:62px; border-radius:100px;
+               background: rgba(255,255,255,.85); filter: blur(2px);
+               animation-name: skyDrift; animation-timing-function: linear; animation-iteration-count: infinite; }
+  .sky-cloud::before, .sky-cloud::after { content:""; position:absolute; background:inherit; border-radius:50%; }
+  .sky-cloud::before { width:120px; height:120px; top:-54px; left:56px; }
+  .sky-cloud::after  { width:86px; height:86px; top:-34px; left:176px; }
+  @keyframes skyDrift { from { transform: translateX(-20vw); } to { transform: translateX(125vw); } }
+
+  main { position: relative; z-index: 1; }
+
+  /* panels float on the sky rather than sitting on a flat page */
+  html.light .glass-panel { background: rgba(255,255,255,.82); backdrop-filter: blur(16px) saturate(140%);
+                            -webkit-backdrop-filter: blur(16px) saturate(140%); }
+  html.light .glass-panel-subtle { background: rgba(255,255,255,.78); backdrop-filter: blur(12px); }
+  .glass-panel { transition: box-shadow .3s ease, border-color .3s ease; }
+
+  /* --- interactivity: reveal on scroll, lift on hover --- */
+  .reveal { opacity:0; transform: translateY(16px); }
+  .reveal.in { opacity:1; transform:none;
+               transition: opacity .55s ease, transform .55s cubic-bezier(.2,.7,.3,1); }
+  .tile { transition: transform .25s ease, border-color .25s ease, background-color .25s ease; }
+  .tile:hover { transform: translateY(-3px); }
+  .nav-btn { transition: transform .15s ease, color .2s ease, background-color .2s ease; }
+  .nav-btn:hover { transform: translateY(-1px); }
+
+  /* everything above stands still when motion is off or unwanted */
+  html.sky-static .reveal { opacity:1; transform:none; transition:none; }
+  html.sky-static .sky-cloud,
+  html.sky-static .radar-sweep,
+  html.sky-static .pulse-indicator,
+  html.sky-static .animate-ping { animation: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity:1; transform:none; }
+    .sky-cloud, .radar-sweep, .pulse-indicator { animation: none !important; }
+  }
+</style>
 </head>
 <body class="bg-space-950 text-slate-200 min-h-screen font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+
+<div id="skyLayer" aria-hidden="true"></div>
 
 <!-- ======================= HORIZONTAL TOP TASKBAR ======================= -->
 <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-space-900/80 backdrop-blur-xl">
@@ -261,6 +329,13 @@
         <span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
       </button>
 
+      <button id="motionToggle" type="button" aria-label="Pause background motion" title="Pause background motion"
+              class="p-2 rounded-xl text-slate-400 hover:text-cyan-300 transition-colors border border-slate-800 bg-space-850">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path id="motionIcon" d="M10 9v6m4-6v6M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+
       <button id="themeToggle" type="button" aria-label="Switch to light theme" title="Switch to light theme"
               class="p-2 rounded-xl text-slate-400 hover:text-cyan-300 transition-colors border border-slate-800 bg-space-850">
         <svg class="w-4 h-4 theme-icon-moon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -301,7 +376,7 @@
 <main class="px-4 lg:px-8 py-8 space-y-10 max-w-[1500px] mx-auto w-full pb-20">
 
   <!-- ================== 1. LIVE SURFACE TELEMETRY (full width) ================== -->
-  <section id="sec-telemetry" class="space-y-4">
+  <section data-reveal id="sec-telemetry" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">01 &mdash; Live surface telemetry</div>
 
     <div class="glass-panel panel relative overflow-hidden">
@@ -350,7 +425,7 @@
           </div>
 
           <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            <div class="bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-cyan-500/40 transition-colors">
+            <div class="tile bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-cyan-500/40 transition-colors">
               <div class="flex items-center justify-between text-slate-400 text-xs">
                 <span>Precip likelihood</span>
                 <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
@@ -359,7 +434,7 @@
               <span class="text-[11px] text-cyan-300 font-mono" id="precipPeak">Probability peak --</span>
             </div>
 
-            <div class="bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-blue-500/40 transition-colors">
+            <div class="tile bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-blue-500/40 transition-colors">
               <div class="flex items-center justify-between text-slate-400 text-xs">
                 <span>Barometric press.</span>
                 <span class="text-[10px] font-mono" id="pressureTrendLabel">--</span>
@@ -368,7 +443,7 @@
               <span class="text-[11px] text-slate-400 font-mono" id="pressureTrend">-- hPa / 3h trend</span>
             </div>
 
-            <div class="bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-violet-500/40 transition-colors">
+            <div class="tile bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-violet-500/40 transition-colors">
               <div class="flex items-center justify-between text-slate-400 text-xs">
                 <span>Dew point vector</span>
                 <span class="text-[10px] font-mono" id="humidityLabel">--</span>
@@ -377,7 +452,7 @@
               <span class="text-[11px] text-slate-400 font-mono">RH spread: <span id="rhSpread">--</span></span>
             </div>
 
-            <div class="bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-emerald-500/40 transition-colors">
+            <div class="tile bg-space-900/70 p-4 rounded-xl border border-slate-800/80 hover:border-emerald-500/40 transition-colors">
               <div class="flex items-center justify-between text-slate-400 text-xs">
                 <span>Cloud cover</span>
                 <span class="text-[10px] text-slate-400 font-mono" id="cloudOktas">--</span>
@@ -397,7 +472,7 @@
   </section>
 
   <!-- ================== 2. GEOSPATIAL GRID (full width) ================== -->
-  <section id="sec-geo" class="space-y-4">
+  <section data-reveal id="sec-geo" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">02 &mdash; Geospatial network</div>
 
     <!-- live gridded field maps -->
@@ -529,7 +604,7 @@
   </section>
 
   <!-- ================== 3. TIME SERIES + FORECAST (full width) ================== -->
-  <section id="sec-series" class="space-y-4">
+  <section data-reveal id="sec-series" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">03 &mdash; Time series &amp; harmonic forecast</div>
 
     <div class="glass-panel panel">
@@ -564,7 +639,7 @@
   </section>
 
   <!-- ================== 4. DISTRIBUTION (full width) ================== -->
-  <section id="sec-distribution" class="space-y-4">
+  <section data-reveal id="sec-distribution" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">04 &mdash; Statistical distribution</div>
 
     <div class="glass-panel panel">
@@ -635,7 +710,7 @@
   </section>
 
   <!-- ================== 5. DENSITY MATRIX (full width) ================== -->
-  <section id="sec-heatmap" class="space-y-4">
+  <section data-reveal id="sec-heatmap" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">05 &mdash; Month &times; year density matrix</div>
 
     <div class="glass-panel panel">
@@ -665,7 +740,7 @@
   </section>
 
   <!-- ================== 6. CORRELATION + GAUGES (two per row) ================== -->
-  <section id="sec-correlation" class="space-y-4">
+  <section data-reveal id="sec-correlation" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">06 &mdash; Correlation &amp; environment</div>
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -739,7 +814,7 @@
   </section>
 
   <!-- ================== 7. LIVE CONDITION CARDS (two per row) ================== -->
-  <section id="sec-conditions" class="space-y-4">
+  <section data-reveal id="sec-conditions" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">07 &mdash; Current conditions</div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -838,7 +913,7 @@
   </section>
 
   <!-- ================== 8. REGRESSION LAB (two per row) ================== -->
-  <section id="sec-regression" class="space-y-4">
+  <section data-reveal id="sec-regression" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">08 &mdash; Regression lab</div>
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -883,7 +958,7 @@
   </section>
 
   <!-- ================== 9. AGGREGATION + ENCODING (full width each) ================== -->
-  <section id="sec-aggregation" class="space-y-4">
+  <section data-reveal id="sec-aggregation" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">09 &mdash; Aggregation &amp; categorical encoding</div>
 
     <div class="glass-panel panel">
@@ -915,7 +990,7 @@
   </section>
 
   <!-- ================== 10. LEAGUE TABLE (full width) ================== -->
-  <section id="sec-league" class="space-y-4">
+  <section data-reveal id="sec-league" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">10 &mdash; Aggregation &middot; ranking</div>
 
     <div class="glass-panel panel">
@@ -963,7 +1038,7 @@
   </section>
 
   <!-- ================== 10. PIPELINE HEALTH (full width) ================== -->
-  <section id="sec-pipeline" class="space-y-4">
+  <section data-reveal id="sec-pipeline" class="space-y-4">
     <div class="section-label font-mono uppercase text-cyan-400/70">11 &mdash; Pipeline &amp; data quality</div>
 
     <div class="glass-panel-subtle panel border border-slate-800 rounded-2xl">
@@ -1008,6 +1083,7 @@
 </main>
 
 <script src="static-source.js"></script>
+<script src="sky.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

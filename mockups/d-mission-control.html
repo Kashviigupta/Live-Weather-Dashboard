@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Design D — Mission Control</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#04070a; color:#c7f5dc;
+         font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+  .amber { color:#ffb000; } .green { color:#35d07f; } .dim { color:#5c7a6c; }
+
+  /* ---- motion wallpaper: radar sweep + drifting grid + scanlines ---- */
+  .bg { position:fixed; inset:0; z-index:0; overflow:hidden; }
+  .bg-grid { position:absolute; inset:-50%;
+          background-image: linear-gradient(rgba(53,208,127,.07) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(53,208,127,.07) 1px, transparent 1px);
+          background-size: 46px 46px; animation: pan 40s linear infinite; }
+  @keyframes pan { to { transform: translate3d(46px, 46px, 0); } }
+  .sweep { position:absolute; left:50%; top:50%; width:150vmax; height:150vmax;
+           margin:-75vmax 0 0 -75vmax; border-radius:50%;
+           background: conic-gradient(from 0deg, rgba(53,208,127,.20) 0deg, rgba(53,208,127,0) 55deg);
+           animation: spin 7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .rings { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+  .ring-c { fill:none; stroke:rgba(53,208,127,.16); }
+  .scan { position:fixed; inset:0; z-index:5; pointer-events:none;
+          background: repeating-linear-gradient(180deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px); }
+  .vignette { position:fixed; inset:0; z-index:4; pointer-events:none;
+              background: radial-gradient(circle at 50% 45%, transparent 55%, rgba(0,0,0,.75) 100%); }
+
+  .box { border:1px solid rgba(53,208,127,.3); background:rgba(4,12,10,.72); position:relative; }
+  .box::before, .box::after { content:""; position:absolute; width:9px; height:9px; border:1px solid #35d07f; }
+  .box::before { left:-1px; top:-1px; border-right:0; border-bottom:0; }
+  .box::after { right:-1px; bottom:-1px; border-left:0; border-top:0; }
+  .hdr { font-size:10px; letter-spacing:.24em; text-transform:uppercase; }
+  .glow { text-shadow: 0 0 14px rgba(255,176,0,.55); }
+  .blink { animation: blink 1.4s steps(2) infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .btn { border:1px solid rgba(53,208,127,.35); transition:.15s; cursor:pointer; }
+  .btn:hover { background:rgba(53,208,127,.15); box-shadow:0 0 12px rgba(53,208,127,.3) inset; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="bg">
+  <div class="bg-grid"></div>
+  <div class="sweep"></div>
+  <svg class="rings" width="900" height="900">
+    <circle class="ring-c" cx="450" cy="450" r="120"/><circle class="ring-c" cx="450" cy="450" r="230"/>
+    <circle class="ring-c" cx="450" cy="450" r="340"/><circle class="ring-c" cx="450" cy="450" r="430"/>
+    <line x1="450" y1="10" x2="450" y2="890" stroke="rgba(53,208,127,.12)"/>
+    <line x1="10" y1="450" x2="890" y2="450" stroke="rgba(53,208,127,.12)"/>
+  </svg>
+</div>
+<div class="vignette"></div><div class="scan"></div>
+
+<div class="relative z-10 max-w-6xl mx-auto px-6 py-7 space-y-5" style="position:relative; z-index:10">
+
+  <div class="box px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-4">
+      <span class="hdr amber glow">◉ AETHERCAST OPS</span>
+      <span class="text-[12px]">STN <b class="green">NEW DELHI SAFDARJUNG</b> · 28.57N 77.21E</span>
+    </div>
+    <div class="text-[11px] flex items-center gap-4">
+      <span class="green blink">● LINK ACTIVE</span><span class="dim">UPLINK 10ms</span>
+      <span class="dim">2026-10-04 14:20Z</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-5" style="display:grid">
+    <div class="box p-5 col-span-12 md:col-span-5">
+      <div class="hdr dim">T-2M SURFACE</div>
+      <div class="flex items-end gap-2 mt-2">
+        <div class="text-[70px] leading-none amber glow">30.6</div><div class="text-lg mb-3">°C</div>
+      </div>
+      <div class="text-[12px] mt-2">APPARENT 33.1 · DEW 23.9 · RH 069%</div>
+      <div class="mt-4 h-px" style="background:rgba(53,208,127,.25)"></div>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px] mt-3">
+        <div class="flex justify-between"><span class="dim">WIND</span><span>08.5 KMH ENE</span></div>
+        <div class="flex justify-between"><span class="dim">GUST</span><span>17.2 KMH</span></div>
+        <div class="flex justify-between"><span class="dim">QNH</span><span>1007.2 HPA</span></div>
+        <div class="flex justify-between"><span class="dim">TREND</span><span class="amber">-1.2 / 3H</span></div>
+        <div class="flex justify-between"><span class="dim">VIS</span><span>10.1 KM</span></div>
+        <div class="flex justify-between"><span class="dim">CLOUD</span><span>OVC 8/8</span></div>
+      </div>
+      <div class="mt-4 text-[11px] border p-2" style="border-color:rgba(255,176,0,.4)">
+        <span class="amber">⚠ HEATWAVE SCREEN</span> · DEP +7.4°C · <span class="amber glow">SEVERE / RED</span>
+      </div>
+    </div>
+
+    <div class="box p-5 col-span-12 md:col-span-7">
+      <div class="flex items-center justify-between">
+        <div class="hdr dim">TIME SERIES · HARMONIC LS</div>
+        <div class="text-[10px] dim">RMSE 2.339 · R² 0.843</div>
+      </div>
+      <svg viewBox="0 0 620 180" class="w-full mt-3">
+        <g stroke="rgba(53,208,127,.14)">
+          <line x1="0" y1="40" x2="620" y2="40"/><line x1="0" y1="80" x2="620" y2="80"/>
+          <line x1="0" y1="120" x2="620" y2="120"/>
+        </g>
+        <polyline fill="none" stroke="#35d07f" stroke-width="1.6"
+          points="0,130 40,112 80,124 120,88 160,96 200,60 240,74 280,48 320,66 360,52 400,78 440,70 480,96 520,88 560,110 600,102"/>
+        <polyline fill="none" stroke="#ffb000" stroke-width="1.6" stroke-dasharray="5 4"
+          points="600,102 620,96"/>
+        <rect x="560" y="40" width="60" height="140" fill="rgba(255,176,0,.07)"/>
+        <text x="566" y="34" class="hdr" fill="#ffb000" font-size="9">FCST</text>
+      </svg>
+      <div class="flex gap-2 mt-3 text-[11px]">
+        <span class="btn px-2.5 py-1 green">TMAX</span><span class="btn px-2.5 py-1 dim">TMIN</span>
+        <span class="btn px-2.5 py-1 dim">RH</span><span class="btn px-2.5 py-1 dim">WIND</span>
+        <span class="btn px-2.5 py-1 dim">PRESSURE</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-5" style="display:grid">
+    <div class="box p-5 col-span-12 md:col-span-4">
+      <div class="hdr dim">CORRELATION MATRIX</div>
+      <div class="grid grid-cols-5 gap-1 mt-3 text-[10px] text-center" id="corr"></div>
+    </div>
+    <div class="box p-5 col-span-12 md:col-span-8">
+      <div class="hdr dim">NETWORK STATUS · 234 NODES</div>
+      <div class="grid grid-cols-12 gap-1 mt-3" id="nodes"></div>
+      <div class="flex gap-5 mt-3 text-[10px] dim">
+        <span><span class="green">■</span> NOMINAL 198</span>
+        <span><span class="amber">■</span> ALERT 31</span>
+        <span><span style="color:#ff5555">■</span> SEVERE 5</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="box p-4 text-[11px] leading-relaxed">
+    <b class="amber">D · MISSION CONTROL</b> — a radar-console reading of the same data: dense, uppercase,
+    phosphor green and amber, every figure in fixed-width columns.<br/>
+    <b>MOTION WALLPAPER:</b> rotating radar sweep, drifting grid, CRT scanlines and vignette (all live behind this panel).<br/>
+    <b>INTERACTIVITY:</b> variable buttons swap the plot, node squares tooltip on hover, keyboard shortcuts for
+    panels, a live ticker of incoming observations.
+  </div>
+</div>
+
+<script>
+  const labels = ["", "TMP", "HUM", "PRS", "WND"];
+  const vals = [[1,-.78,.12,.45],[-.78,1,-.34,-.52],[.12,-.34,1,-.22],[.45,-.52,-.22,1]];
+  let html = labels.map((l) => `<div class="dim py-1">${l}</div>`).join("");
+  vals.forEach((row, i) => {
+    html += `<div class="dim py-1">${labels[i+1]}</div>`;
+    html += row.map((v) => {
+      const a = Math.abs(v);
+      const col = v >= .999 ? "rgba(53,208,127,.85)"
+                : v >= 0 ? `rgba(53,208,127,${.12 + a*.55})` : `rgba(255,85,85,${.12 + a*.55})`;
+      return `<div class="py-1" style="background:${col};color:${a>.5?'#04070a':'#c7f5dc'}">${v.toFixed(2)}</div>`;
+    }).join("");
+  });
+  document.getElementById("corr").innerHTML = html;
+
+  document.getElementById("nodes").innerHTML = Array.from({length: 96}, (_, i) => {
+    const r = Math.random();
+    const c = r > .93 ? "#ff5555" : r > .78 ? "#ffb000" : "#35d07f";
+    return `<div class="h-4 rounded-sm cursor-pointer transition hover:scale-125" title="NODE ${i+1}"
+                 style="background:${c};opacity:.75"></div>`;
+  }).join("");
+</script>
+</body>
+</html>

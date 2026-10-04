@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Design B — Sky Mirror</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: Inter, system-ui, sans-serif; color:#f2f6ff; overflow-x:hidden; }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+
+  /* ---- the wallpaper IS the weather: sky gradient + animated layers ---- */
+  .sky { position:fixed; inset:0; z-index:0; transition: background 1.2s ease; }
+  .sky-clear { background: linear-gradient(180deg,#1b6fd4 0%, #57a7ea 45%, #a9d6f5 100%); }
+  .sky-rain  { background: linear-gradient(180deg,#1f2937 0%, #334155 50%, #5b6b7f 100%); }
+  .sky-night { background: linear-gradient(180deg,#05070f 0%, #0d1530 55%, #1a2550 100%); }
+  .sky-snow  { background: linear-gradient(180deg,#5b6b84 0%, #93a4bd 55%, #d8e3f0 100%); }
+
+  .sun { position:absolute; width:150px; height:150px; border-radius:50%; right:14%; top:8%;
+         background: radial-gradient(circle, #fff6c4 0%, #ffd166 45%, rgba(255,209,102,0) 72%);
+         animation: pulse 7s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(1.09); opacity:.92; } }
+
+  .cloud { position:absolute; background:rgba(255,255,255,.82); border-radius:100px; filter: blur(1px); opacity:.75; }
+  .cloud::before, .cloud::after { content:""; position:absolute; background:inherit; border-radius:50%; }
+  .c1 { width:230px; height:52px; top:16%; animation: float 48s linear infinite; }
+  .c1::before { width:92px; height:92px; top:-42px; left:38px; }
+  .c1::after  { width:66px; height:66px; top:-28px; left:122px; }
+  .c2 { width:300px; height:60px; top:30%; opacity:.5; animation: float 72s linear infinite; animation-delay:-30s; }
+  .c2::before { width:110px; height:110px; top:-50px; left:52px; }
+  .c2::after  { width:80px; height:80px; top:-32px; left:160px; }
+  @keyframes float { from { transform: translateX(-380px); } to { transform: translateX(105vw); } }
+
+  .glass { background: rgba(10,16,30,.46); backdrop-filter: blur(16px) saturate(140%);
+           border:1px solid rgba(255,255,255,.16); border-radius:20px;
+           box-shadow: 0 12px 44px rgba(3,8,20,.35); }
+  .seg { border:1px solid rgba(255,255,255,.22); border-radius:999px; transition:.2s; cursor:pointer; }
+  .seg.on { background:rgba(255,255,255,.9); color:#0b1220; font-weight:600; }
+  .tile { transition: transform .25s ease, background .25s ease; }
+  .tile:hover { transform: translateY(-4px); background: rgba(255,255,255,.14); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div id="sky" class="sky sky-rain">
+  <div id="sun" class="sun" style="display:none"></div>
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <canvas id="fx" class="absolute inset-0 w-full h-full"></canvas>
+</div>
+
+<div class="relative z-10 max-w-6xl mx-auto px-6 py-8 space-y-6">
+
+  <div class="glass px-5 py-3 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <div class="text-sm font-semibold tracking-wide">Mumbai, Maharashtra</div>
+      <div class="mono text-[11px] text-white/70">19.08°N 72.88°E · coastal · live</div>
+    </div>
+    <div class="flex items-center gap-2 mono text-[11px]">
+      <span class="text-white/70 mr-1">wallpaper follows the sky:</span>
+      <span class="seg px-3 py-1" data-sky="clear">Clear</span>
+      <span class="seg px-3 py-1 on" data-sky="rain">Rain</span>
+      <span class="seg px-3 py-1" data-sky="night">Night</span>
+      <span class="seg px-3 py-1" data-sky="snow">Snow</span>
+    </div>
+  </div>
+
+  <div class="glass p-7 grid md:grid-cols-5 gap-7 items-center">
+    <div class="md:col-span-2">
+      <div class="mono text-[11px] tracking-[.25em] text-white/70 uppercase">Right now</div>
+      <div class="flex items-start gap-2 mt-2">
+        <div class="text-[76px] leading-none font-semibold" id="bigTemp">27.1</div>
+        <div class="mono text-xl text-white/80 mt-3">°C</div>
+      </div>
+      <div class="text-white/90 mt-1" id="cond">Moderate rain · feels 30.4°</div>
+      <div class="mono text-[12px] text-white/70 mt-1">today 29.6° / 25.2° · rain 8.4 mm</div>
+    </div>
+    <div class="md:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="tile glass p-3"><div class="text-[11px] text-white/70">Humidity</div><div class="text-2xl mono mt-1">88<span class="text-sm text-white/60">%</span></div></div>
+      <div class="tile glass p-3"><div class="text-[11px] text-white/70">Wind</div><div class="text-2xl mono mt-1">24<span class="text-sm text-white/60">km/h</span></div></div>
+      <div class="tile glass p-3"><div class="text-[11px] text-white/70">Pressure</div><div class="text-2xl mono mt-1">1004<span class="text-sm text-white/60">hPa</span></div></div>
+      <div class="tile glass p-3"><div class="text-[11px] text-white/70">Visibility</div><div class="text-2xl mono mt-1">4.2<span class="text-sm text-white/60">km</span></div></div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-6">
+    <div class="glass p-6 md:col-span-2">
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">24-hour outlook</div>
+        <div class="mono text-[11px] text-white/70">hover a bar</div>
+      </div>
+      <div class="flex items-end gap-2 h-40 mt-5" id="bars"></div>
+    </div>
+    <div class="glass p-6">
+      <div class="font-semibold">Rain probability</div>
+      <svg viewBox="0 0 100 100" class="w-full mt-2">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="10"/>
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#7dd3fc" stroke-width="10" stroke-linecap="round"
+                stroke-dasharray="251" stroke-dashoffset="70" transform="rotate(-90 50 50)"/>
+        <text x="50" y="48" text-anchor="middle" fill="#fff" font-size="20" font-family="monospace">72%</text>
+        <text x="50" y="62" text-anchor="middle" fill="rgba(255,255,255,.7)" font-size="7" font-family="monospace">PEAK 16:00</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="glass p-5 mono text-[11px] text-white/85 leading-relaxed">
+    <b>B · SKY MIRROR</b> — the page looks like the weather it is reporting. Panels are clear glass floating on a live sky.<br/>
+    <b>Motion wallpaper:</b> sky gradient, sun glow, drifting clouds and falling rain/snow are driven by the station's
+    real condition code and local sunrise/sunset — it turns dark at night by itself. Click the chips above to preview.<br/>
+    <b>Interactivity:</b> hover any bar for its hour, chips swap the sky instantly, panels parallax slightly as you scroll.
+  </div>
+</div>
+
+<script>
+  /* sky switcher */
+  const sky = document.getElementById("sky"), sun = document.getElementById("sun");
+  const temps = { clear:["31.8","Clear sky · feels 34.0°"], rain:["27.1","Moderate rain · feels 30.4°"],
+                  night:["24.6","Clear night · feels 25.9°"], snow:["-1.4","Light snow · feels -5.2°"] };
+  let mode = "rain";
+  document.querySelectorAll(".seg").forEach((s) => s.onclick = () => {
+    document.querySelectorAll(".seg").forEach((o) => o.classList.remove("on"));
+    s.classList.add("on");
+    mode = s.dataset.sky;
+    sky.className = "sky sky-" + mode;
+    sun.style.display = mode === "clear" ? "block" : "none";
+    document.getElementById("bigTemp").textContent = temps[mode][0];
+    document.getElementById("cond").textContent = temps[mode][1];
+  });
+
+  /* rain / snow / stars canvas */
+  const cv = document.getElementById("fx"), ctx = cv.getContext("2d");
+  let drops = [];
+  function size() {
+    cv.width = innerWidth; cv.height = innerHeight;
+    drops = Array.from({length: 260}, () => ({
+      x: Math.random()*cv.width, y: Math.random()*cv.height,
+      l: Math.random()*16 + 8, v: Math.random()*6 + 6, r: Math.random()*1.8 + .6
+    }));
+  }
+  size(); addEventListener("resize", size);
+  (function loop(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    if (mode === "rain") {
+      ctx.strokeStyle = "rgba(190,220,255,.5)"; ctx.lineWidth = 1.1;
+      for (const d of drops) {
+        ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 2.5, d.y + d.l); ctx.stroke();
+        d.y += d.v; d.x -= .9;
+        if (d.y > cv.height) { d.y = -20; d.x = Math.random()*cv.width; }
+      }
+    } else if (mode === "snow") {
+      ctx.fillStyle = "rgba(255,255,255,.85)";
+      for (const d of drops) {
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill();
+        d.y += d.v*.22; d.x += Math.sin(d.y/40)*.6;
+        if (d.y > cv.height) { d.y = -8; d.x = Math.random()*cv.width; }
+      }
+    } else if (mode === "night") {
+      for (const d of drops.slice(0,120)) {
+        ctx.globalAlpha = .3 + Math.abs(Math.sin((d.x+d.y)/90 + performance.now()/1400))*.6;
+        ctx.fillStyle = "#dbeafe";
+        ctx.beginPath(); ctx.arc(d.x, (d.y % (cv.height*.7)), d.r*.7, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    requestAnimationFrame(loop);
+  })();
+
+  /* hourly bars with hover */
+  const vals = [24,24,23,23,24,25,27,29,31,32,33,33,32,30,29,28,27,27,26,26,25,25,24,24];
+  document.getElementById("bars").innerHTML = vals.map((v,i) =>
+    `<div class="flex-1 rounded-t-md bg-white/35 hover:bg-white/80 transition-all relative group"
+          style="height:${(v-20)*7}%">
+       <span class="absolute -top-7 left-1/2 -translate-x-1/2 mono text-[10px] bg-black/70 px-1.5 py-0.5 rounded
+                    opacity-0 group-hover:opacity-100 transition whitespace-nowrap">${String(i).padStart(2,"0")}:00 · ${v}°</span>
+     </div>`).join("");
+</script>
+</body>
+</html>

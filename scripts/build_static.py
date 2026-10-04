@@ -72,9 +72,12 @@ def main() -> None:
     )
     html = html.replace('<script src="app.js"></script>',
                         f'<script src="{stamp("app.js")}"></script>')
+    html = html.replace('<script src="sky.js"></script>',
+                        f'<script src="{stamp("sky.js")}"></script>')
     (out / "index.html").write_text(html, encoding="utf-8")
     shutil.copy(frontend / "app.js", out / "app.js")
     shutil.copy(frontend / "static-source.js", out / "static-source.js")
+    shutil.copy(frontend / "sky.js", out / "sky.js")
     (out / ".nojekyll").write_text("", encoding="utf-8")
 
     # ---- dataset-wide results -------------------------------------------
