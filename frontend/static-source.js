@@ -345,6 +345,13 @@
           const { departure, severity, alert } = score(reference, normals.normal_tmax);
           return {
             station, observation, normals,
+            // the header badge names the archive behind the figures; mirrors
+            // analysis.data_source() so static mode reads the same as the API
+            archive: station.source === "open-meteo-archive"
+              ? { source: "open-meteo-archive", label: "Open-Meteo reanalysis 2019-2024",
+                  detail: "Daily history for this location, reshaped into the dataset schema." }
+              : { source: "climate-final-k", label: "Climate_final_k.csv archive",
+                  detail: "IMD-style AWS records shipped with the project, 2019-2024." },
             departure_reference_c: reference,
             departure_tmax_c: departure,
             severity, alert_color: alert,
